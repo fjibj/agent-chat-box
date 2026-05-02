@@ -1,0 +1,15 @@
+node_modules/
+dist/
+*.tsbuildinfo
+.env
+.env.local
+*.db
+*.db-wal
+*.db-shm
+*.sqlite
+coverage/
+.vite/
+.turbo/
+data/
+*.log
+.playwright-mcp/

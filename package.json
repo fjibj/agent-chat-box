@@ -1,0 +1,49 @@
+{
+  "name": "agent-chat-box",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Cross-machine multi-agent task scheduling and collaboration platform",
+  "scripts": {
+    "dev:server": "tsx watch packages/server/src/index.ts",
+    "dev:web": "vite --config packages/web/vite.config.ts",
+    "build:shared": "tsc -p packages/shared/tsconfig.json",
+    "build:server": "tsc -p packages/server/tsconfig.json",
+    "build:daemon": "tsc -p packages/daemon/tsconfig.json",
+    "build": "npm run build:shared && npm run build:server && npm run build:daemon",
+    "lint": "eslint packages/*/src/**/*.ts",
+    "format": "prettier --write \"packages/*/src/**/*.ts\"",
+    "test": "vitest run",
+    "typecheck": "tsc -p tsconfig.json --noEmit"
+  },
+  "dependencies": {
+    "@fastify/cors": "^11.2.0",
+    "@fastify/multipart": "^9.4.0",
+    "@fastify/static": "^9.1.3",
+    "fastify": "^5.0.0",
+    "nanoid": "^5.0.0",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0",
+    "sql.js": "^1.11.0",
+    "ws": "^8.18.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "@types/react": "^19.0.0",
+    "@types/react-dom": "^19.0.0",
+    "@types/sql.js": "^1.4.11",
+    "@types/ws": "^8.5.0",
+    "@typescript-eslint/eslint-plugin": "^8.0.0",
+    "@typescript-eslint/parser": "^8.0.0",
+    "@vitejs/plugin-react": "^4.3.0",
+    "eslint": "^9.0.0",
+    "prettier": "^3.4.0",
+    "tsx": "^4.19.0",
+    "typescript": "^5.7.0",
+    "vite": "^6.0.0",
+    "vitest": "^3.0.0"
+  },
+  "engines": {
+    "node": ">=20.0.0"
+  }
+}

@@ -1,0 +1,209 @@
+version: "6.0.0"
+project_name: "Agent Chat Box"
+project_level: 3
+current_sprint: 1
+sprint_plan_path: "docs/sprint-plan-agent-chat-box-2026-05-01.md"
+
+sprints:
+  - sprint_number: 1
+    start_date: "2026-05-01"
+    end_date: "2026-05-15"
+    capacity_points: 30
+    committed_points: 30
+    completed_points: 0
+    status: "not_started"
+    goal: "跑通服务器 → Daemon → 聊天消息流"
+    stories:
+      - story_id: "STORY-001"
+        title: "项目骨架搭建"
+        points: 3
+        status: "completed"
+      - story_id: "STORY-002"
+        title: "数据库 Schema 初始化"
+        points: 3
+        status: "completed"
+      - story_id: "STORY-003"
+        title: "Fastify HTTP 服务器基础"
+        points: 3
+        status: "completed"
+      - story_id: "STORY-004"
+        title: "WebSocket 服务器基础"
+        points: 5
+        status: "not_started"
+      - story_id: "STORY-005"
+        title: "机器注册与认证"
+        points: 5
+        status: "not_started"
+      - story_id: "STORY-009"
+        title: "频道 CRUD"
+        points: 3
+        status: "not_started"
+      - story_id: "STORY-010"
+        title: "频道成员管理"
+        points: 3
+        status: "not_started"
+      - story_id: "STORY-011"
+        title: "消息发送与接收"
+        points: 5
+        status: "not_started"
+
+  - sprint_number: 2
+    start_date: "2026-05-15"
+    end_date: "2026-05-29"
+    capacity_points: 30
+    committed_points: 30
+    completed_points: 0
+    status: "not_started"
+    goal: "Agent 注册、Sleep/Wake、@mention、历史消息"
+    stories:
+      - story_id: "STORY-006"
+        title: "Daemon 自动重连"
+        points: 3
+        status: "not_started"
+      - story_id: "STORY-007"
+        title: "运行时检测"
+        points: 3
+        status: "not_started"
+      - story_id: "STORY-008"
+        title: "Agent 注册与身份管理"
+        points: 5
+        status: "not_started"
+      - story_id: "STORY-012"
+        title: "@mention 触发"
+        points: 5
+        status: "not_started"
+      - story_id: "STORY-013"
+        title: "历史消息加载"
+        points: 3
+        status: "not_started"
+      - story_id: "STORY-016"
+        title: "Agent Sleep/Wake 引擎"
+        points: 5
+        status: "not_started"
+      - story_id: "STORY-014"
+        title: "私信（DM）"
+        points: 3
+        status: "not_started"
+      - story_id: "STORY-024"
+        title: "Agent 驱动基类"
+        points: 3
+        status: "not_started"
+
+  - sprint_number: 3
+    start_date: "2026-05-29"
+    end_date: "2026-06-12"
+    capacity_points: 30
+    committed_points: 31
+    completed_points: 0
+    status: "not_started"
+    goal: "任务创建、争抢、执行、完成"
+    stories:
+      - story_id: "STORY-017"
+        title: "任务创建与发布"
+        points: 5
+        status: "not_started"
+      - story_id: "STORY-018"
+        title: "任务争抢（Compete 模式）"
+        points: 8
+        status: "not_started"
+      - story_id: "STORY-019"
+        title: "任务执行回报"
+        points: 5
+        status: "not_started"
+      - story_id: "STORY-020"
+        title: "任务协作（Collaborate 模式）"
+        points: 8
+        status: "not_started"
+      - story_id: "STORY-025"
+        title: "Claude Code 驱动"
+        points: 5
+        status: "not_started"
+
+  - sprint_number: 4
+    start_date: "2026-06-12"
+    end_date: "2026-06-26"
+    capacity_points: 30
+    committed_points: 31
+    completed_points: 0
+    status: "not_started"
+    goal: "完成所有 Agent 驱动，任务超时/重试/能力匹配"
+    stories:
+      - story_id: "STORY-026"
+        title: "Codex 驱动"
+        points: 5
+        status: "not_started"
+      - story_id: "STORY-027"
+        title: "OpenClaw 驱动"
+        points: 5
+        status: "not_started"
+      - story_id: "STORY-028"
+        title: "Hermes 驱动"
+        points: 5
+        status: "not_started"
+      - story_id: "STORY-029"
+        title: "进程管理器"
+        points: 5
+        status: "not_started"
+      - story_id: "STORY-021"
+        title: "任务超时与重试"
+        points: 5
+        status: "not_started"
+      - story_id: "STORY-022"
+        title: "Agent 能力匹配"
+        points: 3
+        status: "not_started"
+      - story_id: "STORY-015"
+        title: "文件附件"
+        points: 3
+        status: "not_started"
+
+  - sprint_number: 5
+    start_date: "2026-06-26"
+    end_date: "2026-07-10"
+    capacity_points: 30
+    committed_points: 36
+    completed_points: 0
+    status: "not_started"
+    goal: "完整 Web 管理界面，通知，时间线"
+    stories:
+      - story_id: "STORY-030"
+        title: "Web UI 基础框架"
+        points: 3
+        status: "not_started"
+      - story_id: "STORY-031"
+        title: "聊天界面"
+        points: 8
+        status: "not_started"
+      - story_id: "STORY-032"
+        title: "任务看板"
+        points: 8
+        status: "not_started"
+      - story_id: "STORY-033"
+        title: "Agent 管理面板"
+        points: 8
+        status: "not_started"
+      - story_id: "STORY-034"
+        title: "设置页面"
+        points: 3
+        status: "not_started"
+      - story_id: "STORY-035"
+        title: "浏览器通知"
+        points: 3
+        status: "not_started"
+      - story_id: "STORY-023"
+        title: "任务时间线"
+        points: 3
+        status: "not_started"
+
+velocity:
+  sprint_1: null
+  sprint_2: null
+  sprint_3: null
+  sprint_4: null
+  sprint_5: null
+  rolling_average: null
+
+team:
+  size: 1
+  sprint_length_weeks: 2
+  capacity_per_sprint: 30
