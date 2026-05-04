@@ -75,7 +75,7 @@ export interface Task {
   title: string;
   description?: string;
   priority: 'low' | 'normal' | 'high' | 'urgent';
-  mode: 'compete' | 'collaborate';
+  mode: 'compete' | 'assign' | 'collaborate';
   status: 'pending' | 'claimed' | 'running' | 'completed' | 'failed';
   tags?: string[];
   creatorId: string;
@@ -125,6 +125,7 @@ export interface CreateTaskInput {
   description?: string;
   priority?: Task['priority'];
   mode?: Task['mode'];
+  assigneeId?: string;
   tags?: string[];
   requiredCapabilities?: string[];
   timeoutSeconds?: number;

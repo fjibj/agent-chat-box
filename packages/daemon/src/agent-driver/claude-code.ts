@@ -1,6 +1,6 @@
 import { execSync, spawn } from 'child_process';
 import type { Task } from '@agent-chat-box/shared';
-import { BaseAgentDriver, type AgentProcess } from './base.js';
+import { BaseAgentDriver, type AgentProcess, AgentProcessImpl } from './base.js';
 
 export class ClaudeCodeDriver extends BaseAgentDriver {
   name = 'claude';
@@ -18,29 +18,30 @@ export class ClaudeCodeDriver extends BaseAgentDriver {
 
   async start(task: Task, context: string): Promise<AgentProcess> {
     const prompt = this.buildPrompt(task, context);
+    console.log(`[claude-driver] Starting with prompt: ${prompt.substring(0, 100)}`);
 
-    const proc = this.spawnProcess(
-      'claude',
-      ['--print', '--output-format', 'stream-json', '--prompt', prompt],
-      {
-        CLAUDE_TASK_ID: task.id,
-        CLAUDE_CHANNEL_ID: task.channelId,
-      }
-    );
+    // Use exact same spawn pattern as chat() which works
+    const id = `proc_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+    const isWin = process.platform === 'win32';
+    const proc = spawn('claude', ['-p', prompt], {
+      env: { ...process.env, NODE_OPTIONS: '--max-old-space-size=1024' },
+      stdio: ['ignore', 'pipe', 'pipe'],
+      shell: isWin,
+    });
 
-    return proc;
+    return new AgentProcessImpl(id, proc);
   }
 
-  /** Chat with Claude Code using -p flag (positional prompt, shell mode for Windows .cmd) */
+  /** Chat with Claude Code using -p flag */
   override async chat(message: string): Promise<string> {
     return new Promise((resolve, reject) => {
-      const chunks: string[] = [];
       const isWin = process.platform === 'win32';
       const proc = spawn('claude', ['-p', message], {
         stdio: ['ignore', 'pipe', 'pipe'],
         shell: isWin,
       });
 
+      const chunks: string[] = [];
       proc.stdout.on('data', (data: Buffer) => chunks.push(data.toString()));
       proc.stderr.on('data', (data: Buffer) => chunks.push(data.toString()));
 
@@ -57,23 +58,6 @@ export class ClaudeCodeDriver extends BaseAgentDriver {
   }
 
   private buildPrompt(task: Task, context: string): string {
-    const parts = [
-      `# Task: ${task.title}`,
-      '',
-      task.description || 'No description provided.',
-      '',
-    ];
-
-    if (task.tags && task.tags.length > 0) {
-      parts.push(`**Tags:** ${task.tags.join(', ')}`);
-    }
-
-    if (task.requiredCapabilities && task.requiredCapabilities.length > 0) {
-      parts.push(`**Required capabilities:** ${task.requiredCapabilities.join(', ')}`);
-    }
-
-    parts.push('', '## Context', '', context);
-
-    return parts.join('\n');
+    return `${task.title}: ${task.description || ''}`;
   }
 }

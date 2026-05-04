@@ -1,5 +1,5 @@
 import type { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
-import { createTask, getTask, updateTask, claimTask, getTasksByChannel, getTasksByAgent } from '../modules/task-queue.js';
+import { createTask, getTask, updateTask, claimTask, assignTask, getTasksByChannel, getTasksByAgent } from '../modules/task-queue.js';
 import { getDatabase } from '../db/index.js';
 import type { Task } from '@agent-chat-box/shared';
 
@@ -15,6 +15,7 @@ export async function registerTaskRoutes(app: FastifyInstance): Promise<void> {
       description?: string;
       priority?: Task['priority'];
       mode?: Task['mode'];
+      assigneeId?: string;
       tags?: string[];
       requiredCapabilities?: string[];
       timeoutSeconds?: number;
@@ -33,6 +34,7 @@ export async function registerTaskRoutes(app: FastifyInstance): Promise<void> {
         description: body.description,
         priority: body.priority,
         mode: body.mode,
+        assigneeId: body.assigneeId,
         tags: body.tags,
         requiredCapabilities: body.requiredCapabilities,
         timeoutSeconds: body.timeoutSeconds,
@@ -115,7 +117,7 @@ export async function registerTaskRoutes(app: FastifyInstance): Promise<void> {
     return task;
   });
 
-  // POST /api/tasks/:id/claim — claim a task
+  // POST /api/tasks/:id/claim — claim a task (compete mode)
   app.post('/api/tasks/:id/claim', async (request: FastifyRequest, reply: FastifyReply) => {
     const { id } = request.params as { id: string };
     const body = request.body as { agentId?: string };
@@ -125,6 +127,24 @@ export async function registerTaskRoutes(app: FastifyInstance): Promise<void> {
     }
 
     const result = claimTask(id, body.agentId);
+    if (!result.success) {
+      const status = result.error === 'NOT_FOUND' ? 404 : result.error === 'ALREADY_CLAIMED' ? 409 : 400;
+      return reply.status(status).send(result);
+    }
+
+    return result;
+  });
+
+  // POST /api/tasks/:id/assign — directly assign a task (assign mode)
+  app.post('/api/tasks/:id/assign', async (request: FastifyRequest, reply: FastifyReply) => {
+    const { id } = request.params as { id: string };
+    const body = request.body as { agentId?: string };
+
+    if (!body.agentId) {
+      return reply.status(400).send({ error: 'agentId is required' });
+    }
+
+    const result = assignTask(id, body.agentId);
     if (!result.success) {
       const status = result.error === 'NOT_FOUND' ? 404 : result.error === 'ALREADY_CLAIMED' ? 409 : 400;
       return reply.status(status).send(result);

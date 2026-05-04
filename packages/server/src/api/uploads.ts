@@ -5,7 +5,7 @@ import fs from 'fs';
 import { fileURLToPath } from 'url';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const PROJECT_ROOT = path.resolve(__dirname, '..', '..', '..');
+const PROJECT_ROOT = path.resolve(__dirname, '..', '..', '..', '..');
 const UPLOAD_DIR = process.env.UPLOAD_DIR || path.join(PROJECT_ROOT, 'data', 'uploads');
 const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10MB
 

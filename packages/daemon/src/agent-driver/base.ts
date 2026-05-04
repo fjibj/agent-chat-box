@@ -115,7 +115,7 @@ export abstract class BaseAgentDriver {
     const isWin = process.platform === 'win32';
     const proc = spawn(cmd, args, {
       env: { ...process.env, ...env },
-      stdio: ['pipe', 'pipe', 'pipe'],
+      stdio: ['ignore', 'pipe', 'pipe'],
       shell: isWin,
     });
     return new AgentProcessImpl(id, proc);

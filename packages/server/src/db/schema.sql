@@ -65,7 +65,7 @@ CREATE TABLE IF NOT EXISTS tasks (
   title TEXT NOT NULL,
   description TEXT,
   priority TEXT DEFAULT 'normal' CHECK(priority IN ('low','normal','high','urgent')),
-  mode TEXT DEFAULT 'compete' CHECK(mode IN ('compete','collaborate')),
+  mode TEXT DEFAULT 'compete' CHECK(mode IN ('compete','assign','collaborate')),
   status TEXT DEFAULT 'pending' CHECK(status IN ('pending','claimed','running','completed','failed')),
   tags TEXT,
   creator_id TEXT NOT NULL,

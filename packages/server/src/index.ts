@@ -15,7 +15,7 @@ const PROJECT_ROOT = path.resolve(__dirname, '..', '..', '..');
 import { handleConnection } from './ws/handler.js';
 import { registerMachineRoutes } from './api/machines.js';
 import { registerChannelRoutes, ensureDefaultChannel } from './api/channels.js';
-import { registerAgentRoutes } from './api/agents.js';
+import { registerAgentRoutes, registerNameResolution } from './api/agents.js';
 import { registerMessageRoutes } from './api/messages.js';
 import { registerUploadRoutes } from './api/uploads.js';
 import { registerTaskRoutes } from './api/tasks.js';
@@ -95,6 +95,7 @@ async function main() {
 
   // Agent routes
   await registerAgentRoutes(app);
+  registerNameResolution(app);
   console.log('[server] Agent routes registered');
 
   // Message routes

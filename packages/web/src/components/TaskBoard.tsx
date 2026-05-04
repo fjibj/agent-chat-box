@@ -1,12 +1,17 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { TaskCard } from './TaskCard';
+import { CreateTaskModal } from './CreateTaskModal';
+import { TaskDetailModal } from './TaskDetailModal';
 
 interface Task {
   id: string;
+  channelId: string;
   title: string;
   description?: string;
   priority: 'low' | 'normal' | 'high' | 'urgent';
+  mode?: 'compete' | 'collaborate';
   status: string;
+  creatorId?: string;
   assigneeId?: string;
   createdAt: number;
 }
@@ -20,14 +25,38 @@ interface Column {
 
 export function TaskBoard() {
   const [tasks, setTasks] = useState<Task[]>([]);
+  const [names, setNames] = useState<Record<string, string>>({});
   const [searchQuery, setSearchQuery] = useState('');
+  const [showCreate, setShowCreate] = useState(false);
+  const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null);
 
-  useEffect(() => {
-    fetch('/api/tasks')
+  const fetchNames = useCallback((taskList: Task[]) => {
+    const ids = new Set<string>();
+    for (const t of taskList) {
+      if (t.creatorId) ids.add(t.creatorId);
+      if (t.assigneeId) ids.add(t.assigneeId);
+    }
+    if (ids.size === 0) return;
+    fetch(`/api/resolve-names?ids=${encodeURIComponent([...ids].join(','))}`)
       .then(res => res.json())
-      .then(data => setTasks(data.tasks || []))
+      .then(data => setNames(prev => ({ ...prev, ...data.names })))
       .catch(console.error);
   }, []);
+
+  const fetchTasks = useCallback(() => {
+    fetch('/api/tasks')
+      .then(res => res.json())
+      .then(data => {
+        const taskList = data.tasks || [];
+        setTasks(taskList);
+        fetchNames(taskList);
+      })
+      .catch(console.error);
+  }, [fetchNames]);
+
+  useEffect(() => {
+    fetchTasks();
+  }, [fetchTasks]);
 
   // Filter tasks
   const filteredTasks = tasks.filter(task =>
@@ -70,7 +99,16 @@ export function TaskBoard() {
             onChange={(e) => setSearchQuery(e.target.value)}
             className="px-4 py-2 bg-gray-700 text-white rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 placeholder-gray-400"
           />
-          <button className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700">
+          <button
+            onClick={fetchTasks}
+            className="px-4 py-2 bg-gray-600 text-white rounded-lg hover:bg-gray-500 transition-colors"
+          >
+            Refresh
+          </button>
+          <button
+            onClick={() => setShowCreate(true)}
+            className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+          >
             + New Task
           </button>
         </div>
@@ -93,7 +131,8 @@ export function TaskBoard() {
                 <TaskCard
                   key={task.id}
                   {...task}
-                  onClick={() => console.log('Task clicked:', task.id)}
+                  names={names}
+                  onClick={() => setSelectedTaskId(task.id)}
                 />
               ))}
               {column.tasks.length === 0 && (
@@ -105,6 +144,19 @@ export function TaskBoard() {
           </div>
         ))}
       </div>
+
+      {/* Modals */}
+      <CreateTaskModal
+        open={showCreate}
+        onClose={() => setShowCreate(false)}
+        onCreated={fetchTasks}
+      />
+      <TaskDetailModal
+        taskId={selectedTaskId}
+        onClose={() => setSelectedTaskId(null)}
+        onUpdated={fetchTasks}
+        names={names}
+      />
     </div>
   );
 }

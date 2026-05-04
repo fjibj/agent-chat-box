@@ -4,7 +4,9 @@ import fs from 'fs';
 import { fileURLToPath } from 'url';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const DATA_DIR = process.env.DATA_DIR || path.join(process.cwd(), 'data');
+// Always resolve to project root's data/ dir, regardless of process.cwd()
+const PROJECT_ROOT = path.resolve(__dirname, '..', '..', '..', '..');
+const DATA_DIR = process.env.DATA_DIR || path.join(PROJECT_ROOT, 'data');
 const DB_PATH = path.join(DATA_DIR, 'chatbox.sqlite');
 const SCHEMA_PATH = path.join(__dirname, 'schema.sql');
 
@@ -121,8 +123,38 @@ function migrate(db: DatabaseWrapper): void {
     db.run('ALTER TABLE messages ADD COLUMN sender_name TEXT');
     db.run('PRAGMA user_version = 2');
     console.log('[db] Migrated schema v1 → v2 (added sender_name)');
-  } else {
-    console.log(`[db] Schema version: ${version}`);
+  }
+
+  if (version <= 2) {
+    // v2 → v3: add 'assign' mode to tasks CHECK constraint
+    db.exec(`
+      CREATE TABLE IF NOT EXISTS tasks_new (
+        id TEXT PRIMARY KEY,
+        channel_id TEXT REFERENCES channels(id),
+        title TEXT NOT NULL,
+        description TEXT,
+        priority TEXT DEFAULT 'normal' CHECK(priority IN ('low','normal','high','urgent')),
+        mode TEXT DEFAULT 'compete' CHECK(mode IN ('compete','assign','collaborate')),
+        status TEXT DEFAULT 'pending' CHECK(status IN ('pending','claimed','running','completed','failed')),
+        tags TEXT,
+        creator_id TEXT NOT NULL,
+        assignee_id TEXT REFERENCES agents(id),
+        parent_task_id TEXT REFERENCES tasks(id),
+        required_capabilities TEXT,
+        output TEXT,
+        timeout_seconds INTEGER DEFAULT 3600,
+        max_retries INTEGER DEFAULT 0,
+        retry_count INTEGER DEFAULT 0,
+        created_at INTEGER DEFAULT (unixepoch()),
+        claimed_at INTEGER,
+        completed_at INTEGER
+      );
+      INSERT INTO tasks_new SELECT * FROM tasks;
+      DROP TABLE tasks;
+      ALTER TABLE tasks_new RENAME TO tasks;
+    `);
+    db.run('PRAGMA user_version = 3');
+    console.log('[db] Migrated schema v2 → v3 (added assign mode)');
   }
 }
 

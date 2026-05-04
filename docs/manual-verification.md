@@ -255,20 +255,155 @@ start /min "ACB-Daemon" node daemon.cjs --server ws://100.112.136.37:3000 --toke
 | 20 | Daemon 反复重连死循环 | 高 | daemon/connection.ts | connect() 关旧 ws 触发 close→scheduleReconnect→新建连接→关旧→循环。修复：关旧前 clearTimeout + removeListener('close') |
 | 21 | 同 machine key 多进程互踢 | 高 | — | 多个 daemon 进程用同一 API key，server 不断 close stale。根因：background 启动未去重。用独立 key + 单进程解决 |
 | 22 | 无 channel member 删除端点 | 低 | server/api/channels.ts | 新增 DELETE /api/channels/:id/members/:memberId 端点 |
+| 23 | 任务卡片/详情显示 UUID 不显示名称 | 中 | server/api/agents.ts, web/TaskBoard.tsx, TaskCard.tsx, TaskDetailModal.tsx | 新增 GET /api/resolve-names 端点，前端合并 agent + human 名称映射 |
+| 24 | DB CHECK 约束缺少 'assign' 模式 | 高 | server/db/schema.sql, server/db/index.ts | schema 更新 + migration v2→v3 重建 tasks 表 |
+| 25 | Claude CLI 任务执行报错 "unknown option '--prompt'" | 高 | daemon/agent-driver/claude-code.ts | 改用 `-p` 标志（位置参数） |
+| 26 | Claude CLI 输出 help text 不执行任务 | 高 | daemon/agent-driver/claude-code.ts | start() 的 spawn 参数与 chat() 不一致，统一为 `['ignore','pipe','pipe']` + 简单 prompt |
+| 27 | Claude CLI 执行 OOM (Node.js v24) | 高 | daemon/agent-driver/claude-code.ts | 设置 NODE_OPTIONS=--max-old-space-size=1024 |
+| 28 | Daemon handler 未处理 task.running/task.updated | 低 | daemon/index.ts | 添加 case 消除 "Unhandled" 日志 |
+| 29 | 竞争模式本地 agent 总是赢 | 中 | daemon/index.ts | claimAndExecute 添加 0~3s 随机延迟 |
+| 30 | API Key 未保存 | 低 | docs/api-keys.md, .gitignore | 保存到独立文件，加入 gitignore |
 
 ---
 
-## 6. 下一步验证计划
+## 6. 任务系统 UI 验证
 
-1. **远程 Daemon 重新配置** — 停止旧 daemon，用独立 API key 重启 home-desktop/office-pc
-2. **跨设备聊天测试** — 三台设备互发消息，验证实时显示、名称解析、@mention 回复
-3. **Agent 间对话** — 测试 agent @mention 链式回复（A 回复 @B → B 自动接话）
-4. **任务系统验证** — 创建 task、agent claim、执行、完成全流程
-5. **NPM 发布** — `npx @agent-chat-box/daemon@latest` 一键启动
+**验证环境:** http://localhost:5173 (Web UI) + http://localhost:3000 (Server)
+
+### 6.1 创建任务
+
+| # | 操作 | 预期结果 | 状态 |
+|---|------|----------|------|
+| 1 | 点击顶部导航 "Tasks" | 进入任务看板页面，显示三列：Pending / In Progress / Completed | [ ] |
+| 2 | 点击 "+ New Task" 按钮 | 弹出创建任务模态框，包含 Channel/Title/Description/Priority/Mode/Tags 字段 | [ ] |
+| 3 | 选择频道 #general，填写 Title "测试任务1"，Priority 选 High | 表单正常填写，无报错 | [ ] |
+| 4 | 点击 "Create Task" | 模态框关闭，任务出现在 Pending 列，显示 High 优先级标签 | [ ] |
+| 5 | 创建第二个任务 "测试任务2"，Mode 选 Collaborate | 任务出现在 Pending 列，显示 collaborate 标签 | [ ] |
+
+### 6.2 查看任务详情
+
+| # | 操作 | 预期结果 | 状态 |
+|---|------|----------|------|
+| 1 | 点击 "测试任务1" 卡片 | 弹出详情模态框，显示完整信息：标题、优先级、状态、模式、创建时间 | [ ] |
+| 2 | 确认详情中有 Claim 按钮和 Agent 选择下拉框 | Agent 列表显示已注册的 Agent | [ ] |
+| 3 | 确认 Timeline 区域显示 task.created 事件 | 时间线包含创建记录 | [ ] |
+
+### 6.3 认领任务
+
+| # | 操作 | 预期结果 | 状态 |
+|---|------|----------|------|
+| 1 | 在详情中选择一个 Agent | 下拉框显示 Agent 名称和状态 | [ ] |
+| 2 | 点击 "Claim" 按钮 | 状态变为 claimed，Claim 按钮消失，出现 Start/Complete/Fail 按钮 | [ ] |
+| 3 | 关闭详情，查看看板 | 任务从 Pending 列移到 In Progress 列，显示蓝色 claimed 标签 | [ ] |
+| 4 | 回到详情，Timeline 新增 task.claimed 事件 | 时间线包含 claimed 记录和 assignee 信息 | [ ] |
+
+### 6.4 执行任务
+
+| # | 操作 | 预期结果 | 状态 |
+|---|------|----------|------|
+| 1 | 在详情中点击 "Start" | 状态变为 running | [ ] |
+| 2 | 查看看板 | 任务仍在 In Progress 列，显示 running 标签 | [ ] |
+
+### 6.5 完成任务
+
+| # | 操作 | 预期结果 | 状态 |
+|---|------|----------|------|
+| 1 | 在详情中 Output 输入 "任务完成，耗时 5 分钟" | 输入框正常显示 | [ ] |
+| 2 | 点击 "Complete" | 状态变为 completed，详情显示 Output 内容和 completedAt 时间 | [ ] |
+| 3 | 关闭详情，查看看板 | 任务从 In Progress 列移到 Completed 列，显示绿色 Done 标签 | [ ] |
+| 4 | 查看 Timeline | 包含 task.created → task.claimed → task.completed 完整事件链 | [ ] |
+
+### 6.6 任务失败
+
+| # | 操作 | 预期结果 | 状态 |
+|---|------|----------|------|
+| 1 | 对 "测试任务2" 执行 Claim → 点击 "Fail" | 状态变为 failed | [ ] |
+| 2 | 查看看板 | 任务在 Completed 列，显示红色 Failed 标签 | [ ] |
+
+### 6.7 搜索和刷新
+
+| # | 操作 | 预期结果 | 状态 |
+|---|------|----------|------|
+| 1 | 搜索框输入 "测试任务1" | 只显示匹配的任务，另一个隐藏 | [ ] |
+| 2 | 清空搜索框 | 恢复显示所有任务 | [ ] |
+| 3 | 点击 "Refresh" 按钮 | 重新加载任务列表，数据与服务端同步 | [ ] |
+
+### 6.8 数据持久化
+
+| # | 操作 | 预期结果 | 状态 |
+|---|------|----------|------|
+| 1 | 刷新页面 (F5) | 任务数据保持，状态不变 | [ ] |
+| 2 | 重新进入 Tasks 页面 | 看板正确显示所有任务及其状态 | [ ] |
 
 ---
 
-## 7. 验证时间线
+## 7. 真实任务执行验证
+
+**前置条件:** 按 4.2/4.3 启动 daemon（同一个 daemon 同时支持聊天和任务执行）
+
+### 7.1 竞争模式（Compete）— 自动争抢 + 真实执行
+
+| # | 操作 | 预期结果 | 状态 |
+|---|------|----------|------|
+| 1 | Web UI 点击 "+ New Task" | 弹出创建模态框 | [x] |
+| 2 | 填写 Title "测试竞争任务"，Mode 选 **Compete (auto)** | 表单正常 | [x] |
+| 3 | 点击 "Create Task" | 任务出现在 Pending 列 | [x] |
+| 4 | 等待几秒 | daemon 自动 claim 任务，状态变为 claimed → running | [x] |
+| 5 | 查看看板 | 任务移到 In Progress 列，显示 running 标签 | [x] |
+| 6 | 等待 Claude Code 执行完成 | 状态变为 completed，output 包含执行结果 | [x] |
+| 7 | 查看看板 | 任务移到 Completed 列，显示 Done 标签 | [x] |
+| 8 | 点击任务查看详情 → Timeline | 包含 task.created → task.claimed → task.completed 完整链 | [x] |
+
+**验证结果 (2026-05-04):** 两台远程机器 (home-desktop, office-pc) 竞争模式验证通过。随机延迟 0~3s 保证公平性，home-desktop-claude 抢到任务并真实执行 Claude Code 返回结果。
+
+### 7.2 指派模式（Assign）— 指定 Agent 执行
+
+| # | 操作 | 预期结果 | 状态 |
+|---|------|----------|------|
+| 1 | 点击 "+ New Task" | 弹出创建模态框 | [x] |
+| 2 | 填写 Title "测试指派任务"，Mode 选 **Assign** | 出现 "Assign to Agent" 下拉框 | [x] |
+| 3 | 选择目标 Agent | 下拉框显示 agent 名称和状态 | [x] |
+| 4 | 点击 "Create Task" | 任务直接出现在 In Progress 列（status=claimed） | [x] |
+| 5 | 等待几秒 | daemon 检测到指派给自己，自动开始执行 | [x] |
+| 6 | 等待执行完成 | 状态变为 completed | [x] |
+
+**验证结果 (2026-05-04):** 指派给 office-pc-claude，任务直接 status=claimed，daemon 自动执行 Claude Code，返回远程机器磁盘信息。
+
+### 7.3 管理员手动 Override
+
+| # | 操作 | 预期结果 | 状态 |
+|---|------|----------|------|
+| 1 | 创建一个 Compete 任务，等 daemon 自动 claim | 任务在 In Progress 列 running | [ ] |
+| 2 | 点击任务打开详情，点击 "Fail" | 状态变为 failed，daemon 的执行进程被忽略 | [ ] |
+| 3 | 创建一个 Assign 任务，指派给离线 agent | 任务在 Pending 列（agent 离线不会自动执行） | [ ] |
+| 4 | 在详情中手动选择另一个 agent 点击 "Claim" | 任务被手动 claim 给在线 agent | [ ] |
+
+### 7.4 多 Agent 竞争（需多台机器）
+
+| # | 操作 | 预期结果 | 状态 |
+|---|------|----------|------|
+| 1 | 启动两台机器的 daemon | 两个 agent 在线 | [x] |
+| 2 | 创建 Compete 任务 | 两个 agent 同时收到 task.created | [x] |
+| 3 | 观察哪个 agent 先 claim | 先到的 agent 获得任务，另一个收到 ALREADY_CLAIMED | [x] |
+| 4 | 等待执行完成 | 任务正常 completed | [x] |
+
+**验证结果 (2026-05-04):** home-desktop + office-pc 两台远程机器同时竞争，home-desktop-claude 抢到任务并完成（报告系统运行时间 7天2小时13分钟）。
+
+---
+
+## 8. 下一步验证计划（更新）
+
+1. ~~**远程 Daemon 重新配置**~~ — 已完成，三台机器独立 API key
+2. ~~**竞争模式验证**~~ — 已完成，两台远程机器争抢成功
+3. ~~**指派模式验证**~~ — 已完成，office-pc 指派执行成功
+4. **跨设备聊天测试** — 三台设备互发消息，验证实时显示、名称解析、@mention 回复
+5. **Agent 间对话** — 测试 agent @mention 链式回复（A 回复 @B → B 自动接话）
+6. **协作模式验证** — 创建主任务 → 分解子任务 → 多 agent 并行执行 → 主任务自动完成
+7. **NPM 发布** — `npx @agent-chat-box/daemon@latest` 一键启动
+
+---
+
+## 9. 验证时间线
 
 | 时间 | 操作 | 结果 |
 |------|------|------|
@@ -298,3 +433,11 @@ start /min "ACB-Daemon" node daemon.cjs --server ws://100.112.136.37:3000 --toke
 | 2026-05-02 16:10 | 修复同 key 多进程互踢 | 独立 API key + 确保单进程 |
 | 2026-05-02 16:20 | 新增 channel member 删除端点 | DELETE /api/channels/:id/members/:memberId |
 | 2026-05-02 16:30 | 本机 daemon (laptop-claude) 验证通过 | 连接稳定，@mention 回复正常 |
+| 2026-05-03 10:00 | 任务卡片/详情名称解析 | 新增 resolve-names API，前端显示 agent/human 名称 |
+| 2026-05-03 11:00 | 添加 assign 模式到 DB schema | migration v2→v3，CHECK 约束包含 compete/assign/collaborate |
+| 2026-05-03 12:00 | 修复 Claude CLI 参数错误 | --prompt → -p，统一 start() 与 chat() spawn 模式 |
+| 2026-05-03 13:00 | 修复 Claude CLI OOM | NODE_OPTIONS=--max-old-space-size=1024 |
+| 2026-05-03 14:00 | 添加竞争随机延迟 | claimAndExecute 0~3s 延迟保证公平性 |
+| 2026-05-04 10:00 | 竞争模式验证通过 | home-desktop + office-pc 两台远程机器争抢成功 |
+| 2026-05-04 10:10 | 指派模式验证通过 | office-pc-claude 指派执行，返回远程磁盘信息 |
+| 2026-05-04 10:20 | 多 Agent 竞争验证通过 | home-desktop 抢到任务，完成时间 7天2小时 |

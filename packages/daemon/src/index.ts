@@ -5,7 +5,8 @@ import { ClaudeCodeDriver } from './agent-driver/claude-code.js';
 import { CodexDriver } from './agent-driver/codex.js';
 import { OpenClawDriver } from './agent-driver/openclaw.js';
 import { HermesDriver } from './agent-driver/hermes.js';
-import type { WSMessage } from '@agent-chat-box/shared';
+import { ProcessManager } from './process-manager.js';
+import type { WSMessage, Task } from '@agent-chat-box/shared';
 import { MSG } from '@agent-chat-box/shared';
 
 // CLI argument parsing (--server, --token, --name) with env var fallback
@@ -46,6 +47,7 @@ if (!config.token) {
 }
 
 let connection: DaemonConnection;
+let processManager: ProcessManager;
 let registeredAgentId: string | null = null;
 let agentName: string | null = null;
 let agentRuntime: string | null = null;
@@ -81,17 +83,76 @@ async function main() {
     },
   });
 
+  // Create process manager
+  processManager = new ProcessManager(connection);
+
   // Start
   connection.connect();
 
   // Graceful shutdown
   const shutdown = () => {
     console.log('[daemon] Shutting down...');
+    processManager.killAll();
     connection.disconnect();
     process.exit(0);
   };
   process.on('SIGINT', shutdown);
   process.on('SIGTERM', shutdown);
+}
+
+/** Try to claim and execute a task */
+async function claimAndExecute(task: Task): Promise<void> {
+  if (!registeredAgentId || !connection.isConnected()) return;
+
+  // Check if we have a driver for our runtime
+  const driver = agentRuntime ? getDriver(agentRuntime) : null;
+  if (!driver) {
+    console.log(`[daemon] No driver for runtime ${agentRuntime}, skipping task ${task.id}`);
+    return;
+  }
+
+  // Check if task has required capabilities we don't have
+  if (task.requiredCapabilities && task.requiredCapabilities.length > 0) {
+    const availableCaps = driver.capabilities;
+    const hasAll = task.requiredCapabilities.every(cap => availableCaps.includes(cap));
+    if (!hasAll) {
+      console.log(`[daemon] Missing capabilities for task ${task.id}, skipping`);
+      return;
+    }
+  }
+
+  // Random delay 0~3s for fair competition (prevents local agent always winning)
+  const delay = Math.floor(Math.random() * 3000);
+  console.log(`[daemon] Claiming task in ${delay}ms: ${task.title} (${task.id})`);
+  await new Promise(r => setTimeout(r, delay));
+  connection.send(MSG.TASK_CLAIM, { task_id: task.id });
+}
+
+/** Start executing a claimed task */
+async function startTaskExecution(task: Task): Promise<void> {
+  const driver = agentRuntime ? getDriver(agentRuntime) : null;
+  if (!driver) {
+    console.error(`[daemon] No driver for runtime ${agentRuntime}`);
+    return;
+  }
+
+  console.log(`[daemon] Starting execution: ${task.title} (${task.id}) with ${driver.name}`);
+  console.log(`[daemon] Task object keys: ${Object.keys(task).join(',')}`);
+  console.log(`[daemon] Task.title="${task.title}" Task.description="${task.description}"`);
+
+  const context = `Task: ${task.title}\n${task.description || ''}`;
+  try {
+    await processManager.start(registeredAgentId!, driver, task, context);
+  } catch (err) {
+    const errMsg = err instanceof Error ? err.message : String(err);
+    console.error(`[daemon] Failed to start task ${task.id}: ${errMsg}`);
+    // Report failure
+    connection.send(MSG.TASK_UPDATE, {
+      task_id: task.id,
+      status: 'failed',
+      output: `Failed to start: ${errMsg}`,
+    });
+  }
 }
 
 /** Handle @mention: invoke agent runtime and reply */
@@ -197,13 +258,71 @@ function handleServerMessage(msg: WSMessage): void {
     case 'agent.wake': {
       const data = msg.data as { agentId?: string; agentName?: string; context?: { trigger?: string; taskId?: string } };
       console.log(`[daemon] Wake signal for ${data.agentName}: ${data.context?.trigger}`);
-      // Future: spawn Claude Code process to handle task
       break;
     }
 
     case 'task.created': {
-      const data = msg.data as { task?: { id?: string; title?: string } };
-      console.log(`[daemon] New task: ${data.task?.title} (${data.task?.id})`);
+      const data = msg.data as { task?: Task };
+      const task = data.task;
+      if (!task) break;
+
+      console.log(`[daemon] New task: ${task.title} (${task.id}) mode=${task.mode} status=${task.status}`);
+
+      // Skip if already claimed (assign mode pre-claims)
+      if (task.status !== 'pending') {
+        // If already claimed to us, start execution
+        if (task.assigneeId === registeredAgentId) {
+          console.log(`[daemon] Task assigned to us, starting execution`);
+          startTaskExecution(task);
+        }
+        break;
+      }
+
+      // Auto-claim based on mode
+      if (task.mode === 'compete') {
+        // Compete: try to claim
+        claimAndExecute(task);
+      } else if (task.mode === 'assign' && task.assigneeId === registeredAgentId) {
+        // Assign to us: claim
+        claimAndExecute(task);
+      }
+      // collaborate mode: skip for now
+      break;
+    }
+
+    case 'task.claimed': {
+      const data = msg.data as { taskId?: string; task_id?: string; agentId?: string; agent_id?: string; task?: Task };
+      const claimedAgentId = data.agentId || data.agent_id;
+      const taskId = data.taskId || data.task_id;
+
+      // If we claimed it, start execution
+      if (claimedAgentId === registeredAgentId && taskId) {
+        console.log(`[daemon] We claimed task ${taskId}, starting execution`);
+        // Fetch full task details via HTTP then execute
+        const httpUrl = config.server.replace('ws://', 'http://').replace('wss://', 'https://').replace(/\/$/, '');
+        fetch(`${httpUrl}/api/tasks/${taskId}`)
+          .then(res => res.json())
+          .then((data) => startTaskExecution(data as Task))
+          .catch(err => console.error(`[daemon] Failed to fetch task ${taskId}:`, err.message));
+      }
+      break;
+    }
+
+    case 'task.completed': {
+      const data = msg.data as { task_id?: string; taskId?: string };
+      console.log(`[daemon] Task completed: ${data.task_id || data.taskId}`);
+      break;
+    }
+
+    case 'task.running':
+    case 'task.updated': {
+      // Server ack — no action needed
+      break;
+    }
+
+    case 'task.failed': {
+      const data = msg.data as { task_id?: string; taskId?: string };
+      console.log(`[daemon] Task failed: ${data.task_id || data.taskId}`);
       break;
     }
 
@@ -223,18 +342,18 @@ function handleServerMessage(msg: WSMessage): void {
 function registerAgent(): void {
   if (!connection.isConnected()) return;
 
-  const agentName = `${config.name}-claude`;
+  const name = `${config.name}-claude`;
   connection.send(MSG.AGENT_HELLO, {
-    name: agentName,
+    name: name,
     runtime: 'claude',
     role_card: {
-      name: agentName,
+      name: name,
       description: `Claude Code agent on ${config.name}`,
     },
     capabilities: ['code', 'typescript', 'javascript', 'python', 'analysis'],
   });
 
-  console.log(`[daemon] Registering agent: ${agentName}`);
+  console.log(`[daemon] Registering agent: ${name}`);
 }
 
 /** Join the #general channel */

@@ -48,23 +48,30 @@ export function createTask(input: CreateTaskInput, creatorId: string): Task {
   const db = getDatabase();
   const id = crypto.randomUUID();
   const now = Date.now();
+  const mode = input.mode || 'compete';
+
+  // For assign mode with assigneeId, create as 'claimed' directly
+  const initialStatus = (mode === 'assign' && input.assigneeId) ? 'claimed' : 'pending';
 
   db.run(
-    `INSERT INTO tasks (id, channel_id, title, description, priority, mode, tags, creator_id, required_capabilities, timeout_seconds, max_retries, created_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    `INSERT INTO tasks (id, channel_id, title, description, priority, mode, status, tags, creator_id, assignee_id, required_capabilities, timeout_seconds, max_retries, created_at, claimed_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     [
       id,
       input.channelId,
       input.title,
       input.description || null,
       input.priority || 'normal',
-      input.mode || 'compete',
+      mode,
+      initialStatus,
       input.tags ? JSON.stringify(input.tags) : null,
       creatorId,
+      input.assigneeId || null,
       input.requiredCapabilities ? JSON.stringify(input.requiredCapabilities) : null,
       input.timeoutSeconds || 3600,
       input.maxRetries || 0,
       now,
+      initialStatus === 'claimed' ? now : null,
     ]
   );
   db.save();
@@ -75,6 +82,32 @@ export function createTask(input: CreateTaskInput, creatorId: string): Task {
   broadcastToChannel(input.channelId, 'task.created', { task });
 
   return task;
+}
+
+/** Directly assign a task to an agent (assign mode) */
+export function assignTask(taskId: string, agentId: string): ClaimResult {
+  const task = getTask(taskId);
+  if (!task) return { success: false, error: 'NOT_FOUND' };
+  if (task.status !== 'pending') return { success: false, error: 'ALREADY_CLAIMED', claimedBy: task.assigneeId };
+
+  const db = getDatabase();
+  const now = Date.now();
+
+  db.run(
+    `UPDATE tasks SET status = 'claimed', assignee_id = ?, claimed_at = ? WHERE id = ? AND status = 'pending'`,
+    [agentId, now, taskId]
+  );
+  db.save();
+
+  const updatedTask = getTask(taskId)!;
+
+  broadcastToChannel(updatedTask.channelId, 'task.claimed', {
+    taskId,
+    agentId,
+    claimedAt: now,
+  });
+
+  return { success: true, task: updatedTask };
 }
 
 /** Claim a task (compete mode) */

@@ -273,6 +273,51 @@ export function getAgentById(id: string): Agent | null {
   };
 }
 
+/** Register name resolution endpoint */
+export function registerNameResolution(app: FastifyInstance): void {
+  // GET /api/resolve-names?ids=id1,id2,id3 — resolve UUIDs to display names
+  app.get('/api/resolve-names', async (request: FastifyRequest) => {
+    const { ids } = request.query as { ids?: string };
+    if (!ids) return { names: {} };
+
+    const idList = ids.split(',').map(s => s.trim()).filter(Boolean);
+    const names: Record<string, string> = {};
+
+    // 1. Look up agents from DB
+    const db = getDatabase();
+    for (const id of idList) {
+      const stmt = db.prepare('SELECT name FROM agents WHERE id = ?');
+      stmt.bind([id]);
+      if (stmt.step()) {
+        const row = stmt.getAsObject() as { name: string };
+        names[id] = row.name;
+      }
+      stmt.free();
+    }
+
+    // 2. Look up connected human clients
+    const { getClients } = await import('../ws/handler.js');
+    for (const [clientId, client] of getClients()) {
+      if (client.type === 'human' && client.name && idList.includes(clientId)) {
+        names[clientId] = client.name;
+      }
+      // Also check client-provided stable ID
+      if (client.type === 'human' && client.name && idList.includes(client.id)) {
+        names[client.id] = client.name;
+      }
+    }
+
+    // 3. Fill in unknowns with truncated UUID
+    for (const id of idList) {
+      if (!names[id]) {
+        names[id] = id.slice(0, 8) + '...';
+      }
+    }
+
+    return { names };
+  });
+}
+
 /** Get agents by machine ID */
 export function getAgentsByMachineId(machineId: string): Agent[] {
   const db = getDatabase();

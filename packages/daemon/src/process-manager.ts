@@ -1,4 +1,5 @@
 import type { Task } from '@agent-chat-box/shared';
+import { MSG } from '@agent-chat-box/shared';
 import type { BaseAgentDriver, AgentProcess } from './agent-driver/base.js';
 import type { DaemonConnection } from './connection.js';
 
@@ -31,34 +32,36 @@ export class ProcessManager {
 
     this.processes.set(process.id, managed);
 
+    // Mark task as running
+    this.connection.send(MSG.TASK_UPDATE, {
+      task_id: task.id,
+      status: 'running',
+    });
+
     // Stream output to server
     process.onOutput((chunk) => {
-      this.connection.send('task.progress', {
-        task_id: task.id,
-        agent_id: agentId,
-        chunk,
-      });
+      // Could extend server to handle progress chunks; for now just log
+      console.log(`[process] [${task.id}] ${chunk.substring(0, 200)}`);
     });
 
     // Handle completion
     process.onComplete((result) => {
       this.processes.delete(process.id);
-      this.connection.send('task.completed', {
+      this.connection.send(MSG.TASK_UPDATE, {
         task_id: task.id,
-        agent_id: agentId,
-        output: result.output,
-        exit_code: result.exitCode,
+        status: 'completed',
+        output: result.output.slice(0, 10000), // cap output size
       });
-      console.log(`[process] Task ${task.id} completed by ${driver.name}`);
+      console.log(`[process] Task ${task.id} completed by ${driver.name} (exit=${result.exitCode})`);
     });
 
     // Handle errors
     process.onError((error) => {
       this.processes.delete(process.id);
-      this.connection.send('task.failed', {
+      this.connection.send(MSG.TASK_UPDATE, {
         task_id: task.id,
-        agent_id: agentId,
-        error: error.message,
+        status: 'failed',
+        output: error.message,
       });
       console.error(`[process] Task ${task.id} failed: ${error.message}`);
     });

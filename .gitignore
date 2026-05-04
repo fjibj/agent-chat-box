@@ -13,3 +13,4 @@ coverage/
 data/
 *.log
 .playwright-mcp/
+docs/api-keys.md
