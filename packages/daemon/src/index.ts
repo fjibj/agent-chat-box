@@ -53,19 +53,39 @@ let agentName: string | null = null;
 let agentRuntime: string | null = null;
 let joinedChannelId: string | null = null;
 let isReplying = false; // Prevent concurrent replies
+let canDecompose = false; // Set true if chat() works (tested at startup)
 
 async function main() {
   // Register agent drivers
-  registerDriver(new ClaudeCodeDriver());
+  const claudeDriver = new ClaudeCodeDriver();
+  registerDriver(claudeDriver);
   registerDriver(new CodexDriver());
   registerDriver(new OpenClawDriver());
   registerDriver(new HermesDriver());
+
+  // Initialize driver paths (resolves CLI binary path for proper arg passing)
+  await claudeDriver.detect().catch(() => {});
 
   // Detect available runtimes
   console.log('[daemon] Detecting runtimes...');
   const runtimes = await detectRuntimes();
   const available = runtimes.filter(rt => rt.available);
   console.log(`[daemon] Found ${available.length} runtime(s): ${available.map(r => r.name).join(', ') || 'none'}`);
+
+  // Test if chat() works (needed for decomposition/verification)
+  if (available.length > 0) {
+    try {
+      const testDriver = getDriver(available[0].name);
+      if (testDriver) {
+        await testDriver.chat('Reply with only the word "ok"', 'Reply with only the word "ok"');
+        canDecompose = true;
+        console.log('[daemon] Chat test passed — can decompose tasks');
+      }
+    } catch (err) {
+      canDecompose = false;
+      console.log('[daemon] Chat test failed — will only execute leaf tasks');
+    }
+  }
 
   // Create connection
   connection = new DaemonConnection({
@@ -121,10 +141,16 @@ async function claimAndExecute(task: Task): Promise<void> {
     }
   }
 
-  // Random delay 0~3s for fair competition (prevents local agent always winning)
-  const delay = Math.floor(Math.random() * 3000);
-  console.log(`[daemon] Claiming task in ${delay}ms: ${task.title} (${task.id})`);
-  await new Promise(r => setTimeout(r, delay));
+  // Skip delay if task is assigned to us (no competition needed)
+  if (task.assigneeId === registeredAgentId) {
+    console.log(`[daemon] Claiming assigned task immediately: ${task.title} (${task.id})`);
+  } else {
+    // Random delay 2~6s for fair competition (local daemon has ~50ms latency, remote has ~200ms)
+    // Without min delay, local daemon always wins the race
+    const delay = 2000 + Math.floor(Math.random() * 4000);
+    console.log(`[daemon] Claiming task in ${delay}ms: ${task.title} (${task.id})`);
+    await new Promise(r => setTimeout(r, delay));
+  }
   connection.send(MSG.TASK_CLAIM, { task_id: task.id });
 }
 
@@ -191,6 +217,197 @@ async function handleMentionReply(sender: string, question: string, channelId: s
     });
   } finally {
     isReplying = false;
+  }
+}
+
+/** Decompose a collaborate task into subtasks using agent CLI */
+async function decomposeTask(task: Task): Promise<void> {
+  const driver = agentRuntime ? getDriver(agentRuntime) : null;
+  if (!driver) {
+    console.error(`[daemon] No driver for runtime ${agentRuntime}, cannot decompose`);
+    connection.send(MSG.TASK_UPDATE, {
+      task_id: task.id,
+      status: 'failed',
+      output: 'No agent runtime available for decomposition',
+    });
+    return;
+  }
+
+  console.log(`[daemon] Decomposing task: ${task.title} (${task.id})`);
+
+  // Mark as decomposing
+  connection.send(MSG.TASK_UPDATE, {
+    task_id: task.id,
+    status: 'decomposing',
+  });
+
+  const depth = task.depth ?? 0;
+  const canNest = depth < 2; // Allow nesting up to depth 2 (3 levels total)
+
+  // If at max depth, don't decompose — execute directly as leaf task
+  if (!canNest) {
+    console.log(`[daemon] Task at max depth (${depth}), executing directly: ${task.title}`);
+    startTaskExecution(task);
+    return;
+  }
+
+  const decomposePrompt = `Break down the following task into 2-5 smaller subtasks.
+
+Task: ${task.title}
+${task.description ? `Description: ${task.description}` : ''}
+
+Respond ONLY with a JSON array. Each element has "title", "description"${canNest ? ' and optionally "complex": true for subtasks that need further breakdown' : ''}.
+Example: [{"title": "Subtask 1", "description": "Do X"${canNest ? ', "complex": false' : ''}}, {"title": "Subtask 2", "description": "Do Y"${canNest ? ', "complex": true' : ''}}]`;
+
+  const systemPrompt = 'You are a task decomposition agent. You MUST respond with ONLY a valid JSON array, no other text. No explanations, no markdown, no code blocks. Just the raw JSON array.';
+
+  try {
+    const response = await driver.chat(decomposePrompt, systemPrompt);
+    console.log(`[daemon] Decompose response: ${response.substring(0, 300)}`);
+
+    // Parse JSON from response (handle markdown code blocks)
+    let jsonStr = response.trim();
+    const codeBlockMatch = jsonStr.match(/```(?:json)?\s*([\s\S]*?)```/);
+    if (codeBlockMatch) {
+      jsonStr = codeBlockMatch[1].trim();
+    }
+    // Also try to find JSON array in the response
+    const arrayMatch = jsonStr.match(/\[[\s\S]*\]/);
+    if (arrayMatch) {
+      jsonStr = arrayMatch[0];
+    }
+
+    const subtasks = JSON.parse(jsonStr) as Array<{ title: string; description?: string; complex?: boolean }>;
+
+    if (!Array.isArray(subtasks) || subtasks.length === 0) {
+      throw new Error('Invalid subtask format: expected non-empty array');
+    }
+
+    // Create subtasks via HTTP API — no assigneeId so all agents compete for them
+    const httpUrl = config.server.replace('ws://', 'http://').replace('wss://', 'https://').replace(/\/$/, '');
+    const createRes = await fetch(`${httpUrl}/api/tasks/${task.id}/subtasks`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        subtasks: subtasks.slice(0, 5).map(st => ({
+          title: st.title,
+          description: st.description,
+          mode: (canNest && st.complex ? 'collaborate' : 'compete') as 'collaborate' | 'compete',
+        })),
+        creatorId: registeredAgentId,
+        maxRetries: 2,
+      }),
+    });
+
+    if (!createRes.ok) {
+      const errText = await createRes.text();
+      throw new Error(`Failed to create subtasks: ${createRes.status} ${errText}`);
+    }
+
+    const result = await createRes.json() as { subtasks: Task[] };
+    console.log(`[daemon] Created ${result.subtasks.length} subtasks for task ${task.id}`);
+  } catch (err) {
+    const errMsg = err instanceof Error ? err.message : String(err);
+    console.error(`[daemon] Decomposition failed: ${errMsg}`);
+    // Release task back to pending so another daemon can try (instead of marking as failed)
+    connection.send(MSG.TASK_UPDATE, {
+      task_id: task.id,
+      status: 'pending',
+      output: null,
+    });
+    console.log(`[daemon] Released task ${task.id} back to pending`);
+  }
+}
+
+/** Verify completed collaborate task using agent CLI */
+async function verifyTask(task: Task): Promise<void> {
+  const driver = agentRuntime ? getDriver(agentRuntime) : null;
+  if (!driver) {
+    console.error(`[daemon] No driver for runtime ${agentRuntime}, cannot verify`);
+    connection.send(MSG.TASK_UPDATE, {
+      task_id: task.id,
+      status: 'failed',
+      output: 'No agent runtime available for verification',
+    });
+    return;
+  }
+
+  console.log(`[daemon] Verifying task: ${task.title} (${task.id})`);
+
+  // Fetch task tree to get subtask results
+  const httpUrl = config.server.replace('ws://', 'http://').replace('wss://', 'https://').replace(/\/$/, '');
+  try {
+    const treeRes = await fetch(`${httpUrl}/api/tasks/${task.id}/tree`);
+    if (!treeRes.ok) throw new Error(`Failed to fetch tree: ${treeRes.status}`);
+    const tree = await treeRes.json() as { task: Task; children: Task[] };
+
+    // Build verification context
+    const subtaskSummary = tree.children.map((st, i) => {
+      const status = st.status === 'completed' ? '✅' : st.status === 'failed' ? '❌' : '⏳';
+      return `${i + 1}. [${status}] ${st.title}${st.output ? `: ${st.output.substring(0, 200)}` : ''}`;
+    }).join('\n');
+
+    const verifyPrompt = `Review the subtask results and determine if the overall task is complete.
+
+Original Task: ${task.title}
+${task.description ? `Description: ${task.description}` : ''}
+
+Subtask Results:
+${subtaskSummary}
+
+If all subtasks successful: {"verdict":"pass","summary":"Brief summary"}
+If some failed: {"verdict":"fail","summary":"What failed","failedTasks":["title1"]}`;
+
+    const systemPrompt = 'You are a task verification agent. You MUST respond with ONLY a valid JSON object, no other text. No explanations, no markdown, no code blocks. Just the raw JSON object.';
+
+    const response = await driver.chat(verifyPrompt, systemPrompt);
+    console.log(`[daemon] Verify response: ${response.substring(0, 300)}`);
+
+    // Parse JSON
+    let jsonStr = response.trim();
+    const codeBlockMatch = jsonStr.match(/```(?:json)?\s*([\s\S]*?)```/);
+    if (codeBlockMatch) jsonStr = codeBlockMatch[1].trim();
+    const objMatch = jsonStr.match(/\{[\s\S]*\}/);
+    if (objMatch) jsonStr = objMatch[0];
+
+    const result = JSON.parse(jsonStr) as { verdict: string; summary: string; failedTasks?: string[] };
+
+    if (result.verdict === 'pass') {
+      connection.send(MSG.TASK_UPDATE, {
+        task_id: task.id,
+        status: 'completed',
+        output: result.summary || 'All subtasks verified successfully',
+      });
+      console.log(`[daemon] Task ${task.id} verified: PASS`);
+    } else {
+      // Check if retries are available
+      if ((task.retryCount ?? 0) < (task.maxRetries ?? 0)) {
+        console.log(`[daemon] Task ${task.id} verification failed, retrying (${(task.retryCount ?? 0) + 1}/${task.maxRetries})`);
+        connection.send(MSG.TASK_UPDATE, {
+          task_id: task.id,
+          status: 'claimed',
+          output: `Verification failed: ${result.summary}. Retrying...`,
+          retry_count: (task.retryCount ?? 0) + 1,
+        });
+        // Re-decompose after a short delay
+        setTimeout(() => decomposeTask({ ...task, retryCount: (task.retryCount ?? 0) + 1 }), 2000);
+      } else {
+        connection.send(MSG.TASK_UPDATE, {
+          task_id: task.id,
+          status: 'failed',
+          output: result.summary || 'Verification failed',
+        });
+        console.log(`[daemon] Task ${task.id} verified: FAIL (no retries left)`);
+      }
+    }
+  } catch (err) {
+    const errMsg = err instanceof Error ? err.message : String(err);
+    console.error(`[daemon] Verification failed: ${errMsg}`);
+    connection.send(MSG.TASK_UPDATE, {
+      task_id: task.id,
+      status: 'failed',
+      output: `Verification failed: ${errMsg}`,
+    });
   }
 }
 
@@ -266,27 +483,43 @@ function handleServerMessage(msg: WSMessage): void {
       const task = data.task;
       if (!task) break;
 
-      console.log(`[daemon] New task: ${task.title} (${task.id}) mode=${task.mode} status=${task.status}`);
+      console.log(`[daemon] New task: ${task.title} (${task.id}) mode=${task.mode} status=${task.status} depth=${task.depth ?? 0}`);
 
-      // Skip if already claimed (assign mode pre-claims)
+      // Skip if already claimed (assign/collaborate mode pre-claims)
       if (task.status !== 'pending') {
         // If already claimed to us, start execution
         if (task.assigneeId === registeredAgentId) {
-          console.log(`[daemon] Task assigned to us, starting execution`);
-          startTaskExecution(task);
+          console.log(`[daemon] Task assigned to us`);
+          if (task.mode === 'collaborate') {
+            decomposeTask(task);
+          } else {
+            startTaskExecution(task);
+          }
         }
         break;
       }
 
       // Auto-claim based on mode
-      if (task.mode === 'compete') {
-        // Compete: try to claim
+      if (task.assigneeId === registeredAgentId) {
+        // Assigned to us: claim immediately
         claimAndExecute(task);
-      } else if (task.mode === 'assign' && task.assigneeId === registeredAgentId) {
-        // Assign to us: claim
+      } else if (task.mode === 'collaborate' && !canDecompose) {
+        // Skip collaborate tasks if we can't decompose
+        console.log(`[daemon] Skipping collaborate task (cannot decompose): ${task.title}`);
+      } else if (task.mode === 'compete' || task.mode === 'collaborate') {
+        // Compete or collaborate: try to claim with random delay
         claimAndExecute(task);
       }
-      // collaborate mode: skip for now
+      break;
+    }
+
+    case 'task.subtasks': {
+      const data = msg.data as { parentTaskId?: string; subtasks?: Task[] };
+      if (data.subtasks) {
+        console.log(`[daemon] Received ${data.subtasks.length} subtasks for parent ${data.parentTaskId}`);
+        // Subtasks will come as individual task.created messages too
+        // No additional action needed here
+      }
       break;
     }
 
@@ -297,12 +530,24 @@ function handleServerMessage(msg: WSMessage): void {
 
       // If we claimed it, start execution
       if (claimedAgentId === registeredAgentId && taskId) {
-        console.log(`[daemon] We claimed task ${taskId}, starting execution`);
-        // Fetch full task details via HTTP then execute
+        console.log(`[daemon] We claimed task ${taskId}, fetching details...`);
         const httpUrl = config.server.replace('ws://', 'http://').replace('wss://', 'https://').replace(/\/$/, '');
         fetch(`${httpUrl}/api/tasks/${taskId}`)
           .then(res => res.json())
-          .then((data) => startTaskExecution(data as Task))
+          .then((taskData) => {
+            const task = taskData as Task;
+            if (task.mode === 'collaborate' && canDecompose) {
+              // Collaborate task (root or nested): decompose
+              decomposeTask(task);
+            } else if (task.mode === 'collaborate' && !canDecompose) {
+              // Can't decompose: release back to pending
+              console.log(`[daemon] Cannot decompose collaborate task, releasing: ${task.title}`);
+              connection.send(MSG.TASK_UPDATE, { task_id: task.id, status: 'pending', output: null });
+            } else {
+              // Normal execution
+              startTaskExecution(task);
+            }
+          })
           .catch(err => console.error(`[daemon] Failed to fetch task ${taskId}:`, err.message));
       }
       break;
@@ -317,6 +562,17 @@ function handleServerMessage(msg: WSMessage): void {
     case 'task.running':
     case 'task.updated': {
       // Server ack — no action needed
+      break;
+    }
+
+    case 'task.verifying': {
+      const data = msg.data as { task?: Task };
+      const task = data.task;
+      // If this is our task and it's now verifying, run verification
+      if (task && task.assigneeId === registeredAgentId) {
+        console.log(`[daemon] Task ${task.id} entered verifying state, running verification`);
+        verifyTask(task);
+      }
       break;
     }
 

@@ -136,7 +136,7 @@ describe('task-queue: createSubtasks', () => {
 
     const subtasks = createSubtasks(parent.id, [
       { channelId, title: 'Subtask 1', creatorId: agentId },
-      { channelId, title: 'Subtask 2', creatorId: agentId, assigneeId: agentId },
+      { channelId, title: 'Subtask 2', creatorId: agentId, assigneeId: agentId, mode: 'assign' },
     ]);
 
     expect(subtasks.length).toBe(2);
@@ -149,7 +149,7 @@ describe('task-queue: createSubtasks', () => {
 });
 
 describe('task-queue: checkParentCompletion', () => {
-  it('completes parent when all subtasks done', () => {
+  it('moves parent to verifying when all subtasks done', () => {
     const parent = createTask({ channelId, title: 'Parent complete test', mode: 'collaborate' }, agentId);
     const subtasks = createSubtasks(parent.id, [
       { channelId, title: 'Sub A', creatorId: agentId },
@@ -163,7 +163,25 @@ describe('task-queue: checkParentCompletion', () => {
     checkParentCompletion(parent.id);
 
     const updated = getTask(parent.id);
-    expect(updated!.status).toBe('completed');
+    expect(updated!.status).toBe('verifying');
+  });
+
+  it('completes parent after verification passes', () => {
+    const parent = createTask({ channelId, title: 'Parent verify test', mode: 'collaborate' }, agentId);
+    const subtasks = createSubtasks(parent.id, [
+      { channelId, title: 'Sub C', creatorId: agentId },
+    ]);
+
+    updateTask(subtasks[0].id, { status: 'completed' });
+    checkParentCompletion(parent.id);
+
+    const verifying = getTask(parent.id);
+    expect(verifying!.status).toBe('verifying');
+
+    // Simulate verification pass
+    updateTask(parent.id, { status: 'completed', output: 'Verified OK' });
+    const completed = getTask(parent.id);
+    expect(completed!.status).toBe('completed');
   });
 
   it('does not complete parent when subtasks remain', () => {

@@ -6,18 +6,25 @@ interface Task {
   title: string;
   description?: string;
   priority: 'low' | 'normal' | 'high' | 'urgent';
-  mode: 'compete' | 'collaborate';
+  mode: 'compete' | 'assign' | 'collaborate';
   status: string;
   tags?: string[];
   creatorId: string;
   assigneeId?: string;
+  parentTaskId?: string;
+  depth?: number;
   output?: string;
   timeoutSeconds?: number;
-  maxRetries?: number;
-  retryCount?: number;
+  maxRetries: number;
+  retryCount: number;
   createdAt: number;
   claimedAt?: number;
   completedAt?: number;
+}
+
+interface TaskTree {
+  task: Task;
+  children: Task[];
 }
 
 interface TimelineEntry {
@@ -37,8 +44,20 @@ const statusColors: Record<string, string> = {
   pending: 'bg-yellow-500',
   claimed: 'bg-blue-500',
   running: 'bg-blue-400',
+  decomposing: 'bg-purple-500',
+  verifying: 'bg-cyan-500',
   completed: 'bg-green-500',
   failed: 'bg-red-500',
+};
+
+const statusIcons: Record<string, string> = {
+  pending: '⏳',
+  claimed: '🔵',
+  running: '🔄',
+  decomposing: '🧩',
+  verifying: '🔍',
+  completed: '✅',
+  failed: '❌',
 };
 
 const priorityColors: Record<string, string> = {
@@ -57,6 +76,9 @@ export function TaskDetailModal({ taskId, onClose, onUpdated, names }: TaskDetai
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [resolvedNames, setResolvedNames] = useState<Record<string, string>>({});
+  const [taskTree, setTaskTree] = useState<TaskTree | null>(null);
+  const [expandedTasks, setExpandedTasks] = useState<Set<string>>(new Set());
+  const [selectedSubtask, setSelectedSubtask] = useState<string | null>(null);
 
   // Merge prop names with locally resolved names
   const allNames = { ...names, ...resolvedNames };
@@ -69,8 +91,9 @@ export function TaskDetailModal({ taskId, onClose, onUpdated, names }: TaskDetai
     Promise.all([
       fetch(`/api/tasks/${taskId}/timeline`).then(r => r.json()),
       fetch('/api/agents').then(r => r.json()),
+      fetch(`/api/tasks/${taskId}/tree`).then(r => r.json()).catch(() => null),
     ])
-      .then(([timelineData, agentsData]) => {
+      .then(([timelineData, agentsData, treeData]) => {
         setTask(timelineData.task);
         const tl = timelineData.timeline || [];
         setTimeline(tl);
@@ -78,6 +101,11 @@ export function TaskDetailModal({ taskId, onClose, onUpdated, names }: TaskDetai
         setAgents(agentList);
         if (agentList.length > 0 && !selectedAgent) {
           setSelectedAgent(agentList[0].id);
+        }
+        if (treeData && treeData.task) {
+          setTaskTree(treeData);
+          // Auto-expand all
+          setExpandedTasks(new Set([treeData.task.id, ...treeData.children.map((c: Task) => c.id)]));
         }
 
         // Collect IDs from timeline for name resolution
@@ -88,6 +116,13 @@ export function TaskDetailModal({ taskId, onClose, onUpdated, names }: TaskDetai
           }
           if (entry.data?.agentId) extraIds.add(entry.data.agentId);
           if (entry.data?.claimedBy) extraIds.add(entry.data.claimedBy);
+        }
+        // Also collect IDs from tree
+        if (treeData?.children) {
+          for (const child of treeData.children) {
+            if (child.assigneeId) extraIds.add(child.assigneeId);
+            if (child.creatorId) extraIds.add(child.creatorId);
+          }
         }
         if (extraIds.size > 0) {
           fetch(`/api/resolve-names?ids=${encodeURIComponent([...extraIds].join(','))}`)
@@ -141,9 +176,38 @@ export function TaskDetailModal({ taskId, onClose, onUpdated, names }: TaskDetai
     const result = await apiCall(`/api/tasks/${taskId}`, 'PATCH', body);
     if (result) {
       onUpdated();
-      const data = await fetch(`/api/tasks/${taskId}/timeline`).then(r => r.json());
-      setTask(data.task);
-      setTimeline(data.timeline || []);
+      refreshDetail();
+    }
+  };
+
+  const handleForceComplete = async () => {
+    if (!taskId) return;
+    const result = await apiCall(`/api/tasks/${taskId}/force-complete`, 'POST');
+    if (result) {
+      onUpdated();
+      refreshDetail();
+    }
+  };
+
+  const handleForceFail = async () => {
+    if (!taskId) return;
+    const result = await apiCall(`/api/tasks/${taskId}/force-fail`, 'POST');
+    if (result) {
+      onUpdated();
+      refreshDetail();
+    }
+  };
+
+  const refreshDetail = async () => {
+    if (!taskId) return;
+    const [timelineData, treeData] = await Promise.all([
+      fetch(`/api/tasks/${taskId}/timeline`).then(r => r.json()),
+      fetch(`/api/tasks/${taskId}/tree`).then(r => r.json()).catch(() => null),
+    ]);
+    setTask(timelineData.task);
+    setTimeline(timelineData.timeline || []);
+    if (treeData && treeData.task) {
+      setTaskTree(treeData);
     }
   };
 
@@ -278,7 +342,116 @@ export function TaskDetailModal({ taskId, onClose, onUpdated, names }: TaskDetai
                   </button>
                 </>
               )}
+              {/* Force buttons for admin override */}
+              {task.status !== 'completed' && task.status !== 'failed' && (
+                <div className="flex gap-2 ml-auto">
+                  <button
+                    onClick={handleForceComplete}
+                    disabled={loading}
+                    className="px-3 py-2 bg-emerald-700 text-white rounded-lg text-xs hover:bg-emerald-600 disabled:opacity-50 transition-colors"
+                    title="Force complete (admin override)"
+                  >
+                    Force Complete
+                  </button>
+                  <button
+                    onClick={handleForceFail}
+                    disabled={loading}
+                    className="px-3 py-2 bg-red-800 text-white rounded-lg text-xs hover:bg-red-700 disabled:opacity-50 transition-colors"
+                    title="Force fail (admin override)"
+                  >
+                    Force Fail
+                  </button>
+                </div>
+              )}
             </div>
+
+            {/* Task Tree (for collaborate mode) */}
+            {taskTree && taskTree.children.length > 0 && (
+              <div className="mb-4">
+                <h4 className="text-sm font-semibold text-gray-400 mb-2">
+                  Subtasks ({taskTree.children.filter(c => c.status === 'completed').length}/{taskTree.children.length})
+                </h4>
+                <div className="space-y-1">
+                  {taskTree.children
+                    .filter(c => !c.parentTaskId || c.parentTaskId === task.id)
+                    .map(child => (
+                      <div key={child.id}>
+                        <div
+                          className="flex items-center space-x-2 p-2 bg-gray-700 rounded cursor-pointer hover:bg-gray-650"
+                          onClick={() => {
+                            setExpandedTasks(prev => {
+                              const next = new Set(prev);
+                              if (next.has(child.id)) next.delete(child.id);
+                              else next.add(child.id);
+                              return next;
+                            });
+                          }}
+                        >
+                          <span className="text-sm">{statusIcons[child.status] || '❓'}</span>
+                          <span className="text-sm text-gray-200 flex-1">{child.title}</span>
+                          {child.retryCount > 0 && (
+                            <span className="text-xs px-1.5 py-0.5 rounded bg-amber-600 text-white" title={`Retried ${child.retryCount}/${child.maxRetries} times`}>
+                              retry {child.retryCount}/{child.maxRetries}
+                            </span>
+                          )}
+                          <span className={`text-xs px-1.5 py-0.5 rounded ${statusColors[child.status] || 'bg-gray-500'} text-white`}>
+                            {child.status}
+                          </span>
+                          {child.assigneeId && (
+                            <span className="text-xs text-gray-400">
+                              {allNames[child.assigneeId] || child.assigneeId}
+                            </span>
+                          )}
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setSelectedSubtask(child.id);
+                            }}
+                            className="text-xs text-blue-400 hover:text-blue-300"
+                          >
+                            detail
+                          </button>
+                        </div>
+                        {/* Nested subtasks (depth 2) */}
+                        {expandedTasks.has(child.id) && (
+                          <div className="ml-6 space-y-1 mt-1">
+                            {taskTree.children
+                              .filter(gc => gc.parentTaskId === child.id)
+                              .map(grandchild => (
+                                <div
+                                  key={grandchild.id}
+                                  className="flex items-center space-x-2 p-1.5 bg-gray-600 rounded text-sm"
+                                >
+                                  <span>{statusIcons[grandchild.status] || '❓'}</span>
+                                  <span className="text-gray-200 flex-1">{grandchild.title}</span>
+                                  {grandchild.retryCount > 0 && (
+                                    <span className="text-xs px-1.5 py-0.5 rounded bg-amber-600 text-white" title={`Retried ${grandchild.retryCount}/${grandchild.maxRetries} times`}>
+                                      retry {grandchild.retryCount}/{grandchild.maxRetries}
+                                    </span>
+                                  )}
+                                  <span className={`text-xs px-1.5 py-0.5 rounded ${statusColors[grandchild.status] || 'bg-gray-500'} text-white`}>
+                                    {grandchild.status}
+                                  </span>
+                                  {grandchild.assigneeId && (
+                                    <span className="text-xs text-gray-400">
+                                      {allNames[grandchild.assigneeId] || grandchild.assigneeId}
+                                    </span>
+                                  )}
+                                  <button
+                                    onClick={() => setSelectedSubtask(grandchild.id)}
+                                    className="text-xs text-blue-400 hover:text-blue-300"
+                                  >
+                                    detail
+                                  </button>
+                                </div>
+                              ))}
+                          </div>
+                        )}
+                      </div>
+                    ))}
+                </div>
+              </div>
+            )}
 
             {/* Timeline */}
             {timeline.length > 0 && (
@@ -316,6 +489,16 @@ export function TaskDetailModal({ taskId, onClose, onUpdated, names }: TaskDetai
           </button>
         </div>
       </div>
+
+      {/* Subtask detail modal (recursive) */}
+      {selectedSubtask && (
+        <TaskDetailModal
+          taskId={selectedSubtask}
+          onClose={() => setSelectedSubtask(null)}
+          onUpdated={onUpdated}
+          names={allNames}
+        />
+      )}
     </div>
   );
 }

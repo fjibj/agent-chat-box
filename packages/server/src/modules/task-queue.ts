@@ -8,7 +8,7 @@ import { TASK_TIMEOUT_CHECK_INTERVAL_MS } from '@agent-chat-box/shared';
 export function getTask(taskId: string): Task | null {
   const db = getDatabase();
   const stmt = db.prepare(
-    'SELECT id, channel_id, title, description, priority, mode, status, tags, creator_id, assignee_id, parent_task_id, required_capabilities, output, timeout_seconds, max_retries, retry_count, created_at, claimed_at, completed_at FROM tasks WHERE id = ?'
+    'SELECT id, channel_id, title, description, priority, mode, status, tags, creator_id, assignee_id, parent_task_id, depth, required_capabilities, output, timeout_seconds, max_retries, retry_count, created_at, claimed_at, completed_at FROM tasks WHERE id = ?'
   );
   stmt.bind([taskId]);
 
@@ -32,6 +32,7 @@ export function getTask(taskId: string): Task | null {
     creatorId: row.creator_id as string,
     assigneeId: row.assignee_id as string | undefined,
     parentTaskId: row.parent_task_id as string | undefined,
+    depth: (row.depth as number) ?? 0,
     requiredCapabilities: row.required_capabilities ? JSON.parse(row.required_capabilities as string) : undefined,
     output: row.output as string | undefined,
     timeoutSeconds: row.timeout_seconds as number,
@@ -50,8 +51,8 @@ export function createTask(input: CreateTaskInput, creatorId: string): Task {
   const now = Date.now();
   const mode = input.mode || 'compete';
 
-  // For assign mode with assigneeId, create as 'claimed' directly
-  const initialStatus = (mode === 'assign' && input.assigneeId) ? 'claimed' : 'pending';
+  // For assign/collaborate mode with assigneeId, create as 'claimed' directly
+  const initialStatus = (input.assigneeId && (mode === 'assign' || mode === 'collaborate')) ? 'claimed' : 'pending';
 
   db.run(
     `INSERT INTO tasks (id, channel_id, title, description, priority, mode, status, tags, creator_id, assignee_id, required_capabilities, timeout_seconds, max_retries, created_at, claimed_at)
@@ -79,6 +80,51 @@ export function createTask(input: CreateTaskInput, creatorId: string): Task {
   const task = getTask(id)!;
 
   // Broadcast to channel
+  broadcastToChannel(input.channelId, 'task.created', { task });
+
+  return task;
+}
+
+/** Create task with explicit parent and depth */
+export function createTaskWithParent(
+  input: CreateTaskInput,
+  creatorId: string,
+  parentTaskId: string,
+  depth: number
+): Task {
+  const db = getDatabase();
+  const id = crypto.randomUUID();
+  const now = Date.now();
+  const mode = input.mode || 'compete';
+  const initialStatus = (mode === 'assign' && input.assigneeId) ? 'claimed' : 'pending';
+
+  db.run(
+    `INSERT INTO tasks (id, channel_id, title, description, priority, mode, status, tags, creator_id, assignee_id, parent_task_id, depth, required_capabilities, timeout_seconds, max_retries, created_at, claimed_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    [
+      id,
+      input.channelId,
+      input.title,
+      input.description || null,
+      input.priority || 'normal',
+      mode,
+      initialStatus,
+      input.tags ? JSON.stringify(input.tags) : null,
+      creatorId,
+      input.assigneeId || null,
+      parentTaskId,
+      depth,
+      input.requiredCapabilities ? JSON.stringify(input.requiredCapabilities) : null,
+      input.timeoutSeconds || 3600,
+      input.maxRetries || 0,
+      now,
+      initialStatus === 'claimed' ? now : null,
+    ]
+  );
+  db.save();
+
+  const task = getTask(id)!;
+
   broadcastToChannel(input.channelId, 'task.created', { task });
 
   return task;
@@ -187,14 +233,26 @@ export function updateTask(taskId: string, input: UpdateTaskInput): Task | null 
   if (input.status) {
     sets.push('status = ?');
     params.push(input.status);
-    if (input.status === 'completed') {
+    if (input.status === 'completed' || input.status === 'failed') {
       sets.push('completed_at = ?');
       params.push(Date.now());
+    }
+    if (input.status === 'claimed') {
+      sets.push('claimed_at = ?');
+      params.push(Date.now());
+    }
+    // Clear assignee when releasing back to pending
+    if (input.status === 'pending') {
+      sets.push('assignee_id = NULL');
     }
   }
   if (input.output !== undefined) {
     sets.push('output = ?');
     params.push(input.output);
+  }
+  if (input.retry_count !== undefined) {
+    sets.push('retry_count = ?');
+    params.push(input.retry_count);
   }
 
   if (sets.length === 0) return getTask(taskId);
@@ -205,72 +263,173 @@ export function updateTask(taskId: string, input: UpdateTaskInput): Task | null 
 
   const task = getTask(taskId);
   if (task) {
-    broadcastToChannel(task.channelId, `task.${input.status || 'updated'}`, { task });
+    // Auto-retry: if task failed and retries remain, reset to pending
+    if (input.status === 'failed' && task.retryCount < task.maxRetries) {
+      const db2 = getDatabase();
+      db2.run(
+        "UPDATE tasks SET status = 'pending', assignee_id = NULL, retry_count = retry_count + 1, output = NULL WHERE id = ?",
+        [taskId]
+      );
+      db2.save();
+      const retriedTask = getTask(taskId)!;
+      broadcastToChannel(retriedTask.channelId, 'task.created', { task: retriedTask });
+      console.log(`[task] Auto-retrying task ${taskId} (attempt ${retriedTask.retryCount}/${retriedTask.maxRetries})`);
+      return retriedTask;
+    }
+
+    // When releasing back to pending, broadcast as task.created so daemons can claim it
+    const broadcastType = input.status === 'pending' ? 'task.created' : `task.${input.status || 'updated'}`;
+    broadcastToChannel(task.channelId, broadcastType, { task });
   }
 
   return task;
 }
 
-/** Create subtasks for collaborative mode */
-export function createSubtasks(parentTaskId: string, subtasks: Array<{ channelId: string; title: string; description?: string; assigneeId?: string; creatorId: string }>): Task[] {
-  const db = getDatabase();
-  const createdTasks: Task[] = [];
+/** Create subtasks for collaborative mode with depth tracking */
+export function createSubtasks(
+  parentTaskId: string,
+  subtasks: Array<{ channelId: string; title: string; description?: string; assigneeId?: string; creatorId: string; mode?: 'compete' | 'assign' }>,
+  maxRetries?: number
+): Task[] {
+  const parentTask = getTask(parentTaskId);
+  if (!parentTask) return [];
 
-  for (const st of subtasks) {
-    const id = crypto.randomUUID();
-    const now = Date.now();
-
-    db.run(
-      `INSERT INTO tasks (id, channel_id, title, description, mode, status, creator_id, assignee_id, parent_task_id, created_at)
-       VALUES (?, ?, ?, ?, 'collaborate', ?, ?, ?, ?, ?)`,
-      [
-        id,
-        st.channelId,
-        st.title,
-        st.description || null,
-        st.assigneeId ? 'claimed' : 'pending',
-        st.creatorId,
-        st.assigneeId || null,
-        parentTaskId,
-        now,
-      ]
-    );
-
-    createdTasks.push(getTask(id)!);
+  const childDepth = (parentTask.depth ?? 0) + 1;
+  const MAX_DEPTH = 3;
+  if (childDepth >= MAX_DEPTH) {
+    console.warn(`[task] Cannot create subtasks: depth ${childDepth} >= max ${MAX_DEPTH}`);
+    return [];
   }
 
-  db.save();
+  const MAX_SUBTASKS = 5;
+  const capped = subtasks.slice(0, MAX_SUBTASKS);
+  if (subtasks.length > MAX_SUBTASKS) {
+    console.warn(`[task] Subtask count ${subtasks.length} > max ${MAX_SUBTASKS}, truncated`);
+  }
+
+  const createdTasks: Task[] = [];
+  for (const st of capped) {
+    const task = createTaskWithParent(
+      {
+        channelId: st.channelId,
+        title: st.title,
+        description: st.description,
+        mode: st.mode || 'compete',
+        assigneeId: st.assigneeId,
+        maxRetries: maxRetries ?? 0,
+      },
+      st.creatorId,
+      parentTaskId,
+      childDepth
+    );
+    createdTasks.push(task);
+  }
 
   // Broadcast subtasks creation
-  const parentTask = getTask(parentTaskId);
-  if (parentTask) {
-    broadcastToChannel(parentTask.channelId, 'task.subtasks', {
-      parentTaskId,
-      subtasks: createdTasks,
-    });
-  }
+  broadcastToChannel(parentTask.channelId, 'task.subtasks', {
+    parentTaskId,
+    subtasks: createdTasks,
+  });
 
   return createdTasks;
 }
 
-/** Check if all subtasks are completed and update parent */
+/** Get full task tree (task + all descendants) */
+export function getTaskTree(taskId: string): { task: Task; children: Task[] } | null {
+  const task = getTask(taskId);
+  if (!task) return null;
+
+  const children: Task[] = [];
+  const queue = [taskId];
+
+  while (queue.length > 0) {
+    const parentId = queue.shift()!;
+    const db = getDatabase();
+    const stmt = db.prepare('SELECT id FROM tasks WHERE parent_task_id = ? ORDER BY created_at ASC');
+    stmt.bind([parentId]);
+
+    while (stmt.step()) {
+      const row = stmt.getAsObject() as { id: string };
+      const child = getTask(row.id);
+      if (child) {
+        children.push(child);
+        queue.push(child.id);
+      }
+    }
+    stmt.free();
+  }
+
+  return { task, children };
+}
+
+/** Check if all subtasks are completed and trigger verifying */
 export function checkParentCompletion(parentTaskId: string): void {
   const db = getDatabase();
   const stmt = db.prepare(
-    "SELECT COUNT(*) as count FROM tasks WHERE parent_task_id = ? AND status != 'completed'"
+    "SELECT COUNT(*) as total, SUM(CASE WHEN status = 'completed' THEN 1 ELSE 0 END) as completed, SUM(CASE WHEN status = 'failed' THEN 1 ELSE 0 END) as failed FROM tasks WHERE parent_task_id = ?"
   );
   stmt.bind([parentTaskId]);
 
   if (stmt.step()) {
-    const row = stmt.getAsObject() as { count: number };
+    const row = stmt.getAsObject() as { total: number; completed: number; failed: number };
     stmt.free();
 
-    if (row.count === 0) {
-      updateTask(parentTaskId, { status: 'completed', output: 'All subtasks completed' });
+    // All subtasks done (completed or failed)
+    if (row.total > 0 && row.completed + row.failed === row.total) {
+      const parentTask = getTask(parentTaskId);
+      if (!parentTask) return;
+
+      if (row.failed > 0) {
+        // Some subtasks failed — check if retries available (use parent's maxRetries)
+        const failedTasks = getFailedSubtasks(parentTaskId);
+        const parentMaxRetries = parentTask.maxRetries ?? 3;
+        let retried = false;
+        for (const ft of failedTasks) {
+          if (ft.retryCount < parentMaxRetries) {
+            // Retry: reset to pending
+            db.run(
+              "UPDATE tasks SET status = 'pending', assignee_id = NULL, retry_count = retry_count + 1 WHERE id = ?",
+              [ft.id]
+            );
+            retried = true;
+          }
+        }
+        db.save();
+
+        if (retried) {
+          broadcastToChannel(parentTask.channelId, 'task.retrying', {
+            parentTaskId,
+            retriedCount: failedTasks.filter(ft => ft.retryCount < parentMaxRetries).length,
+          });
+          // Don't finalize parent yet — wait for retries
+          return;
+        }
+      }
+
+      // All done or no retries left → move to verifying
+      updateTask(parentTaskId, { status: 'verifying' });
     }
   } else {
     stmt.free();
   }
+}
+
+/** Get failed subtasks for retry */
+function getFailedSubtasks(parentTaskId: string): Task[] {
+  const db = getDatabase();
+  const tasks: Task[] = [];
+  const stmt = db.prepare(
+    "SELECT id FROM tasks WHERE parent_task_id = ? AND status = 'failed'"
+  );
+  stmt.bind([parentTaskId]);
+
+  while (stmt.step()) {
+    const row = stmt.getAsObject() as { id: string };
+    const task = getTask(row.id);
+    if (task) tasks.push(task);
+  }
+  stmt.free();
+  return tasks;
 }
 
 /** Get tasks by channel */

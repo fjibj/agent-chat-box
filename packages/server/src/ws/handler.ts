@@ -8,7 +8,7 @@ import { addChannelMember, removeChannelMember, getChannelMembers } from '../api
 import { saveMessage } from '../api/messages.js';
 import { sleepAgent, checkAndWakeAgents } from '../modules/wake-engine.js';
 import { getDatabase } from '../db/index.js';
-import { createTask, claimTask, updateTask } from '../modules/task-queue.js';
+import { createTask, claimTask, updateTask, checkParentCompletion } from '../modules/task-queue.js';
 import type { RoleCard } from '@agent-chat-box/shared';
 
 export interface Client {
@@ -96,12 +96,19 @@ export function handleConnection(ws: WebSocket, type: 'human' | 'daemon'): Clien
 
   // Close handler
   ws.on('close', () => {
-    // Set machine offline if daemon was authenticated
+    // Set machine offline only if no other active connection for same machine
     if (client.machineId) {
-      const db = getDatabase();
-      db.run('UPDATE machines SET status = ? WHERE id = ?', ['offline', client.machineId]);
-      db.save();
-      console.log(`[ws] Machine offline: ${client.machineId}`);
+      const hasOtherConnection = Array.from(clients.values()).some(
+        c => c.id !== clientId && c.machineId === client.machineId && c.ws.readyState === WebSocket.OPEN
+      );
+      if (!hasOtherConnection) {
+        const db = getDatabase();
+        db.run('UPDATE machines SET status = ? WHERE id = ?', ['offline', client.machineId]);
+        db.save();
+        console.log(`[ws] Machine offline: ${client.machineId}`);
+      } else {
+        console.log(`[ws] Machine ${client.machineId} still has active connection, staying online`);
+      }
     }
 
     // Clean up human members from channels on disconnect
@@ -588,6 +595,7 @@ function handleTaskUpdate(client: Client, msg: WSMessage): void {
     task_id?: string;
     status?: string;
     output?: string;
+    retry_count?: number;
   };
 
   if (!data.task_id) {
@@ -598,6 +606,7 @@ function handleTaskUpdate(client: Client, msg: WSMessage): void {
   const task = updateTask(data.task_id, {
     status: data.status as Task['status'],
     output: data.output,
+    retry_count: data.retry_count,
   });
 
   if (!task) {
@@ -614,6 +623,11 @@ function handleTaskUpdate(client: Client, msg: WSMessage): void {
   });
 
   console.log(`[ws] Task updated: ${data.task_id} status=${data.status}`);
+
+  // Check parent completion when subtask finishes
+  if ((data.status === 'completed' || data.status === 'failed') && task?.parentTaskId) {
+    checkParentCompletion(task.parentTaskId);
+  }
 }
 
 /** Broadcast message to all clients in a channel (except excludeId) */

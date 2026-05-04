@@ -1,5 +1,5 @@
 import type { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
-import { createTask, getTask, updateTask, claimTask, assignTask, getTasksByChannel, getTasksByAgent } from '../modules/task-queue.js';
+import { createTask, getTask, updateTask, claimTask, assignTask, getTasksByChannel, getTasksByAgent, getTaskTree, checkParentCompletion } from '../modules/task-queue.js';
 import { getDatabase } from '../db/index.js';
 import type { Task } from '@agent-chat-box/shared';
 
@@ -50,7 +50,7 @@ export async function registerTaskRoutes(app: FastifyInstance): Promise<void> {
   app.get('/api/tasks', async (request: FastifyRequest) => {
     const query = request.query as { status?: string };
     const db = getDatabase();
-    let sql = 'SELECT id, channel_id, title, description, priority, mode, status, assignee_id, creator_id, tags, required_capabilities, timeout_seconds, max_retries, output, parent_task_id, created_at, claimed_at, completed_at FROM tasks';
+    let sql = 'SELECT id, channel_id, title, description, priority, mode, status, assignee_id, creator_id, tags, required_capabilities, timeout_seconds, max_retries, output, parent_task_id, depth, created_at, claimed_at, completed_at FROM tasks';
     const params: unknown[] = [];
 
     if (query.status) {
@@ -85,6 +85,7 @@ export async function registerTaskRoutes(app: FastifyInstance): Promise<void> {
         retryCount: 0,
         output: row.output as string | undefined,
         parentTaskId: row.parent_task_id as string | undefined,
+        depth: (row.depth as number) ?? 0,
         createdAt: (row.created_at as number) || 0,
         claimedAt: row.claimed_at as number | undefined,
         completedAt: row.completed_at as number | undefined,
@@ -114,6 +115,12 @@ export async function registerTaskRoutes(app: FastifyInstance): Promise<void> {
     if (!task) {
       return reply.status(404).send({ error: 'Task not found' });
     }
+
+    // Check parent completion when subtask finishes
+    if ((body.status === 'completed' || body.status === 'failed') && task.parentTaskId) {
+      checkParentCompletion(task.parentTaskId);
+    }
+
     return task;
   });
 
@@ -229,6 +236,86 @@ export async function registerTaskRoutes(app: FastifyInstance): Promise<void> {
     timeline.sort((a, b) => a.timestamp - b.timestamp);
 
     return { task, timeline };
+  });
+
+  // GET /api/tasks/:id/tree — get task with all descendants
+  app.get('/api/tasks/:id/tree', async (request: FastifyRequest, reply: FastifyReply) => {
+    const { id } = request.params as { id: string };
+    const tree = getTaskTree(id);
+    if (!tree) {
+      return reply.status(404).send({ error: 'Task not found' });
+    }
+    return tree;
+  });
+
+  // POST /api/tasks/:id/force-complete — force complete a task
+  app.post('/api/tasks/:id/force-complete', async (request: FastifyRequest, reply: FastifyReply) => {
+    const { id } = request.params as { id: string };
+    const task = getTask(id);
+    if (!task) {
+      return reply.status(404).send({ error: 'Task not found' });
+    }
+    if (task.status === 'completed') {
+      return reply.status(409).send({ error: 'Already completed' });
+    }
+
+    const updated = updateTask(id, { status: 'completed', output: task.output || 'Force completed by admin' });
+    return updated;
+  });
+
+  // POST /api/tasks/:id/force-fail — force fail a task (triggers retry if available)
+  app.post('/api/tasks/:id/force-fail', async (request: FastifyRequest, reply: FastifyReply) => {
+    const { id } = request.params as { id: string };
+    const task = getTask(id);
+    if (!task) {
+      return reply.status(404).send({ error: 'Task not found' });
+    }
+    if (task.status === 'failed') {
+      return reply.status(409).send({ error: 'Already failed' });
+    }
+
+    const updated = updateTask(id, { status: 'failed', output: 'Force failed by admin' });
+    return updated;
+  });
+
+  // POST /api/tasks/:id/subtasks — create subtasks (called by daemon after decomposition)
+  app.post('/api/tasks/:id/subtasks', async (request: FastifyRequest, reply: FastifyReply) => {
+    const { id } = request.params as { id: string };
+    const body = request.body as {
+      subtasks?: Array<{ title: string; description?: string; mode?: 'compete' | 'assign'; assigneeId?: string }>;
+      creatorId?: string;
+      maxRetries?: number;
+    };
+
+    if (!body.subtasks || !Array.isArray(body.subtasks) || body.subtasks.length === 0) {
+      return reply.status(400).send({ error: 'subtasks array is required' });
+    }
+    if (!body.creatorId) {
+      return reply.status(400).send({ error: 'creatorId is required' });
+    }
+
+    const parentTask = getTask(id);
+    if (!parentTask) {
+      return reply.status(404).send({ error: 'Task not found' });
+    }
+
+    // Import createSubtasks
+    const { createSubtasks } = await import('../modules/task-queue.js');
+    const subtaskInputs = body.subtasks.map(st => ({
+      channelId: parentTask.channelId,
+      title: st.title,
+      description: st.description,
+      mode: st.mode,
+      assigneeId: st.assigneeId,
+      creatorId: body.creatorId!,
+    }));
+
+    const created = createSubtasks(id, subtaskInputs, body.maxRetries);
+
+    // Update parent status to decomposing → running (subtasks now executing)
+    updateTask(id, { status: 'running' });
+
+    return { subtasks: created };
   });
 
   console.log('[tasks] Task routes registered');

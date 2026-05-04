@@ -93,7 +93,7 @@ export abstract class BaseAgentDriver {
   abstract start(task: Task, context: string): Promise<AgentProcess>;
 
   /** Send a chat message and get a text response */
-  async chat(message: string): Promise<string> {
+  async chat(message: string, _systemPrompt?: string): Promise<string> {
     return new Promise((resolve, reject) => {
       const chunks: string[] = [];
       const proc = this.spawnProcess(this.binary, ['--print', '--prompt', message]);

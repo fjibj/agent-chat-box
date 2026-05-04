@@ -9,10 +9,12 @@ interface Task {
   title: string;
   description?: string;
   priority: 'low' | 'normal' | 'high' | 'urgent';
-  mode?: 'compete' | 'collaborate';
+  mode?: 'compete' | 'assign' | 'collaborate';
   status: string;
   creatorId?: string;
   assigneeId?: string;
+  parentTaskId?: string;
+  depth?: number;
   createdAt: number;
 }
 
@@ -58,11 +60,35 @@ export function TaskBoard() {
     fetchTasks();
   }, [fetchTasks]);
 
-  // Filter tasks
-  const filteredTasks = tasks.filter(task =>
+  // Filter tasks — only show root tasks (no parentTaskId) on the board
+  const rootTasks = tasks.filter(t => !t.parentTaskId);
+  const filteredTasks = rootTasks.filter(task =>
     task.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
     task.description?.toLowerCase().includes(searchQuery.toLowerCase())
   );
+
+  // Calculate subtask progress for collaborate tasks
+  const getSubtaskProgress = (taskId: string) => {
+    const children = tasks.filter(t => t.parentTaskId === taskId);
+    if (children.length === 0) return undefined;
+    return {
+      completed: children.filter(t => t.status === 'completed').length,
+      total: children.length,
+    };
+  };
+
+  // Check if a collaborate task has any active (non-terminal) children
+  const hasActiveChildren = (taskId: string) => {
+    return tasks.some(t => t.parentTaskId === taskId && !['completed', 'failed'].includes(t.status));
+  };
+
+  // Effective status: for collaborate tasks, if children are still active, treat as "running"
+  const getEffectiveStatus = (task: { id: string; status: string; mode?: string }) => {
+    if (task.mode === 'collaborate' && hasActiveChildren(task.id)) {
+      return 'running';
+    }
+    return task.status;
+  };
 
   // Group by status
   const columns: Column[] = [
@@ -70,19 +96,22 @@ export function TaskBoard() {
       id: 'pending',
       title: 'Pending',
       status: 'pending',
-      tasks: filteredTasks.filter(t => t.status === 'pending'),
+      tasks: filteredTasks.filter(t => getEffectiveStatus(t) === 'pending'),
     },
     {
       id: 'active',
       title: 'In Progress',
       status: 'claimed',
-      tasks: filteredTasks.filter(t => t.status === 'claimed' || t.status === 'running'),
+      tasks: filteredTasks.filter(t => ['claimed', 'running', 'decomposing', 'verifying'].includes(getEffectiveStatus(t))),
     },
     {
       id: 'completed',
       title: 'Completed',
       status: 'completed',
-      tasks: filteredTasks.filter(t => t.status === 'completed' || t.status === 'failed'),
+      tasks: filteredTasks.filter(t => {
+        const s = getEffectiveStatus(t);
+        return s === 'completed' || s === 'failed';
+      }),
     },
   ];
 
@@ -132,6 +161,7 @@ export function TaskBoard() {
                   key={task.id}
                   {...task}
                   names={names}
+                  subtaskProgress={getSubtaskProgress(task.id)}
                   onClick={() => setSelectedTaskId(task.id)}
                 />
               ))}

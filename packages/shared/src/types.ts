@@ -76,11 +76,12 @@ export interface Task {
   description?: string;
   priority: 'low' | 'normal' | 'high' | 'urgent';
   mode: 'compete' | 'assign' | 'collaborate';
-  status: 'pending' | 'claimed' | 'running' | 'completed' | 'failed';
+  status: 'pending' | 'claimed' | 'running' | 'decomposing' | 'verifying' | 'completed' | 'failed';
   tags?: string[];
   creatorId: string;
   assigneeId?: string;
   parentTaskId?: string;
+  depth?: number;
   requiredCapabilities?: string[];
   output?: string;
   timeoutSeconds: number;
@@ -136,6 +137,7 @@ export interface CreateTaskInput {
 export interface UpdateTaskInput {
   status?: Task['status'];
   output?: string;
+  retry_count?: number;
 }
 
 // Subtask input

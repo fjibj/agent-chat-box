@@ -125,8 +125,8 @@ function migrate(db: DatabaseWrapper): void {
     console.log('[db] Migrated schema v1 → v2 (added sender_name)');
   }
 
-  if (version <= 2) {
-    // v2 → v3: add 'assign' mode to tasks CHECK constraint
+  if (version <= 3) {
+    // v2/v3 → v4: add assign mode, depth column, decomposing/verifying status
     db.exec(`
       CREATE TABLE IF NOT EXISTS tasks_new (
         id TEXT PRIMARY KEY,
@@ -135,11 +135,12 @@ function migrate(db: DatabaseWrapper): void {
         description TEXT,
         priority TEXT DEFAULT 'normal' CHECK(priority IN ('low','normal','high','urgent')),
         mode TEXT DEFAULT 'compete' CHECK(mode IN ('compete','assign','collaborate')),
-        status TEXT DEFAULT 'pending' CHECK(status IN ('pending','claimed','running','completed','failed')),
+        status TEXT DEFAULT 'pending' CHECK(status IN ('pending','claimed','running','decomposing','verifying','completed','failed')),
         tags TEXT,
         creator_id TEXT NOT NULL,
         assignee_id TEXT REFERENCES agents(id),
         parent_task_id TEXT REFERENCES tasks(id),
+        depth INTEGER DEFAULT 0,
         required_capabilities TEXT,
         output TEXT,
         timeout_seconds INTEGER DEFAULT 3600,
@@ -149,12 +150,21 @@ function migrate(db: DatabaseWrapper): void {
         claimed_at INTEGER,
         completed_at INTEGER
       );
-      INSERT INTO tasks_new SELECT * FROM tasks;
-      DROP TABLE tasks;
-      ALTER TABLE tasks_new RENAME TO tasks;
     `);
-    db.run('PRAGMA user_version = 3');
-    console.log('[db] Migrated schema v2 → v3 (added assign mode)');
+    // Insert with explicit column list to handle schema differences
+    db.exec(`
+      INSERT INTO tasks_new (id, channel_id, title, description, priority, mode, status, tags, creator_id, assignee_id, parent_task_id, depth, required_capabilities, output, timeout_seconds, max_retries, retry_count, created_at, claimed_at, completed_at)
+      SELECT id, channel_id, title, description, priority, mode, status, tags, creator_id, assignee_id, parent_task_id, 0, required_capabilities, output, timeout_seconds, max_retries, retry_count, created_at, claimed_at, completed_at FROM tasks;
+    `);
+    db.exec(`DROP TABLE tasks; ALTER TABLE tasks_new RENAME TO tasks;`);
+    // Recreate indexes
+    db.exec(`
+      CREATE INDEX IF NOT EXISTS idx_tasks_status ON tasks(status);
+      CREATE INDEX IF NOT EXISTS idx_tasks_channel ON tasks(channel_id);
+      CREATE INDEX IF NOT EXISTS idx_tasks_assignee ON tasks(assignee_id);
+    `);
+    db.run('PRAGMA user_version = 4');
+    console.log('[db] Migrated schema to v4 (assign mode, depth, decomposing/verifying)');
   }
 }
 

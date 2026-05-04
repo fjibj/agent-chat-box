@@ -263,6 +263,9 @@ start /min "ACB-Daemon" node daemon.cjs --server ws://100.112.136.37:3000 --toke
 | 28 | Daemon handler 未处理 task.running/task.updated | 低 | daemon/index.ts | 添加 case 消除 "Unhandled" 日志 |
 | 29 | 竞争模式本地 agent 总是赢 | 中 | daemon/index.ts | claimAndExecute 添加 0~3s 随机延迟 |
 | 30 | API Key 未保存 | 低 | docs/api-keys.md, .gitignore | 保存到独立文件，加入 gitignore |
+| 31 | 同 machine 新旧连接竞态导致 daemon 重连死循环 | 高 | server/ws/handler.ts | close handler 检查是否还有同 machineId 的活跃连接，有则不标 offline |
+| 32 | 任务超时后子任务卡住无法继续 | 中 | — | 手动通过 PATCH API 重置根任务为 running + 子任务为 pending |
+| 33 | Claude CLI 子进程 OOM (NODE_OPTIONS 过大) | 中 | daemon/agent-driver/claude-code.ts | --max-old-space-size 从 1024 降为 512 |
 
 ---
 
@@ -391,7 +394,65 @@ start /min "ACB-Daemon" node daemon.cjs --server ws://100.112.136.37:3000 --toke
 
 ---
 
-## 8. 下一步验证计划（更新）
+## 8. 协作模式 (Collaborate) 验证
+
+**设计规格:**
+- 最大嵌套深度: 3 层 (根=0, 子=1, 孙=2)
+- 单次最大子任务数: 5
+- 失败重试上限: 3
+- 新增状态: `decomposing`, `verifying`
+- 人工干预: force complete / force fail (任意层级)
+
+### 8.1 基础协作流程
+
+| # | 操作 | 预期结果 | 状态 |
+|---|------|----------|------|
+| 1 | 创建 collaborate 任务 "分析项目结构" | 任务出现在 Pending 列 | [ ] |
+| 2 | 等待 agent claim | 状态变为 claimed → decomposing | [ ] |
+| 3 | Agent 执行拆分 prompt | 自动生成子任务（≤5个），状态变为 decomposing | [ ] |
+| 4 | 子任务自动 compete/assign 执行 | 子任务独立执行，状态 pending → claimed → running → completed | [ ] |
+| 5 | 所有子任务完成 | 父任务进入 verifying 状态 | [ ] |
+| 6 | Agent 执行验证 prompt | 验证通过 → 父任务 completed | [ ] |
+| 7 | 查看 Timeline | 包含 task.created → claimed → decomposing → verifying → completed 完整链 | [ ] |
+
+### 8.2 子任务失败重试
+
+| # | 操作 | 预期结果 | 状态 |
+|---|------|----------|------|
+| 1 | 创建 collaborate 任务，其中一个子任务失败 | 失败子任务自动重试（最多3次） | [ ] |
+| 2 | 重试成功 | 父任务正常 completed | [ ] |
+| 3 | 重试3次仍失败 | 父任务标记 failed | [ ] |
+
+### 8.3 人工 Force Override
+
+| # | 操作 | 预期结果 | 状态 |
+|---|------|----------|------|
+| 1 | 子任务执行中，点击 "Force Complete" | 子任务强制完成，父任务继续验证流程 | [ ] |
+| 2 | 子任务执行中，点击 "Force Fail" | 子任务强制失败，触发重试 | [ ] |
+| 3 | 父任务 verifying 时，点击 "Force Complete" | 父任务直接 completed | [ ] |
+| 4 | 父任务任意状态，点击 "Force Fail" | 父任务直接 failed | [ ] |
+
+### 8.4 任务树 UI
+
+| # | 操作 | 预期结果 | 状态 |
+|---|------|----------|------|
+| 1 | 点击协作任务卡片 | 详情弹窗显示子任务树（可折叠） | [ ] |
+| 2 | 子任务状态图标 | completed=绿✅, running=蓝🔄, failed=红❌, pending=灰⏳ | [ ] |
+| 3 | 主任务卡片显示进度 | 显示 "2/5 completed" 进度 | [ ] |
+| 4 | 点击子任务 | 可查看子任务详情 | [ ] |
+| 5 | 子任务详情有返回按钮 | 可跳回父任务 | [ ] |
+
+### 8.5 三层嵌套
+
+| # | 操作 | 预期结果 | 状态 |
+|---|------|----------|------|
+| 1 | 根任务拆出子任务，子任务再拆孙任务 | 最多3层，孙任务不可再拆 | [ ] |
+| 2 | 孙任务全部完成 | 子任务进入 verifying → completed | [ ] |
+| 3 | 所有子任务完成 | 根任务进入 verifying → completed | [ ] |
+
+---
+
+## 9. 下一步验证计划（更新）
 
 1. ~~**远程 Daemon 重新配置**~~ — 已完成，三台机器独立 API key
 2. ~~**竞争模式验证**~~ — 已完成，两台远程机器争抢成功
@@ -441,3 +502,7 @@ start /min "ACB-Daemon" node daemon.cjs --server ws://100.112.136.37:3000 --toke
 | 2026-05-04 10:00 | 竞争模式验证通过 | home-desktop + office-pc 两台远程机器争抢成功 |
 | 2026-05-04 10:10 | 指派模式验证通过 | office-pc-claude 指派执行，返回远程磁盘信息 |
 | 2026-05-04 10:20 | 多 Agent 竞争验证通过 | home-desktop 抢到任务，完成时间 7天2小时 |
+| 2026-05-04 15:00 | 修复 server 新旧连接竞态 bug | close handler 检查同 machine 活跃连接，daemon 不再死循环重连 |
+| 2026-05-04 15:10 | 清理残留 daemon 进程 | 多次启动导致同 key 多进程互踢，清理后单实例稳定 |
+| 2026-05-04 15:20 | 协作模式任务超时处理 | 根任务超时标 failed，子任务卡住。手动重置根任务 + 子任务状态 |
+| 2026-05-04 15:30 | 修复 Claude CLI 子进程 OOM | NODE_OPTIONS --max-old-space-size 从 1024 降为 512 |
