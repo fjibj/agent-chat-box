@@ -20,25 +20,16 @@ export class HermesDriver extends BaseAgentDriver {
     const prompt = this.buildPrompt(task, context);
 
     // Hermes CLI invocation (placeholder - adjust based on actual CLI)
-    const proc = this.spawnProcess(
-      'hermes',
-      ['--prompt', prompt],
-      {
-        HERMES_TASK_ID: task.id,
-        HERMES_CHANNEL_ID: task.channelId,
-      }
-    );
+    const proc = this.spawnProcess('hermes', ['--prompt', prompt], {
+      HERMES_TASK_ID: task.id,
+      HERMES_CHANNEL_ID: task.channelId,
+    });
 
     return proc;
   }
 
   private buildPrompt(task: Task, context: string): string {
-    const parts = [
-      `Task: ${task.title}`,
-      '',
-      task.description || 'No description provided.',
-      '',
-    ];
+    const parts = [`Task: ${task.title}`, '', task.description || 'No description provided.', ''];
 
     if (task.tags && task.tags.length > 0) {
       parts.push(`Tags: ${task.tags.join(', ')}`);

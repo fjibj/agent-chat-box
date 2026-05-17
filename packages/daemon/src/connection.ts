@@ -119,7 +119,9 @@ export class DaemonConnection {
   private handleMessage(msg: WSMessage): void {
     switch (msg.type) {
       case 'machine.welcome':
-        console.log(`[daemon] Authenticated: ${(msg.data as { machineName?: string })?.machineName || 'unknown'}`);
+        console.log(
+          `[daemon] Authenticated: ${(msg.data as { machineName?: string })?.machineName || 'unknown'}`,
+        );
         // Delegate to user handler so daemon can register agent after auth
         this.options.onMessage?.(msg);
         break;

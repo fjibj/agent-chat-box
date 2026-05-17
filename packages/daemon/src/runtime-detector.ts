@@ -25,7 +25,9 @@ export async function detectRuntimes(): Promise<RuntimeInfo[]> {
       const output = execSync(rt.versionCmd, {
         timeout: DETECT_TIMEOUT_MS,
         stdio: ['pipe', 'pipe', 'pipe'],
-      }).toString().trim();
+      })
+        .toString()
+        .trim();
 
       const version = parseVersion(output);
       results.push({
@@ -65,5 +67,5 @@ function parseVersion(output: string): string {
 
 /** Get only available runtime names */
 export function getAvailableRuntimeNames(runtimes: RuntimeInfo[]): string[] {
-  return runtimes.filter(rt => rt.available).map(rt => rt.name);
+  return runtimes.filter((rt) => rt.available).map((rt) => rt.name);
 }

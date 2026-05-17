@@ -20,7 +20,12 @@ export class ProcessManager {
   }
 
   /** Start a task with a driver */
-  async start(agentId: string, driver: BaseAgentDriver, task: Task, context: string): Promise<string> {
+  async start(
+    agentId: string,
+    driver: BaseAgentDriver,
+    task: Task,
+    context: string,
+  ): Promise<string> {
     const process = await driver.start(task, context);
     const managed: ManagedProcess = {
       id: process.id,
@@ -52,7 +57,9 @@ export class ProcessManager {
         status: 'completed',
         output: result.output.slice(0, 10000), // cap output size
       });
-      console.log(`[process] Task ${task.id} completed by ${driver.name} (exit=${result.exitCode})`);
+      console.log(
+        `[process] Task ${task.id} completed by ${driver.name} (exit=${result.exitCode})`,
+      );
     });
 
     // Handle errors

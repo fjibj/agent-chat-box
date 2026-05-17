@@ -20,25 +20,16 @@ export class OpenClawDriver extends BaseAgentDriver {
     const prompt = this.buildPrompt(task, context);
 
     // OpenClaw CLI invocation (placeholder - adjust based on actual CLI)
-    const proc = this.spawnProcess(
-      'openclaw',
-      ['--prompt', prompt],
-      {
-        OPENCLAW_TASK_ID: task.id,
-        OPENCLAW_CHANNEL_ID: task.channelId,
-      }
-    );
+    const proc = this.spawnProcess('openclaw', ['--prompt', prompt], {
+      OPENCLAW_TASK_ID: task.id,
+      OPENCLAW_CHANNEL_ID: task.channelId,
+    });
 
     return proc;
   }
 
   private buildPrompt(task: Task, context: string): string {
-    const parts = [
-      `Task: ${task.title}`,
-      '',
-      task.description || 'No description provided.',
-      '',
-    ];
+    const parts = [`Task: ${task.title}`, '', task.description || 'No description provided.', ''];
 
     if (task.tags && task.tags.length > 0) {
       parts.push(`Tags: ${task.tags.join(', ')}`);

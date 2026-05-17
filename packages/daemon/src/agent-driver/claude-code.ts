@@ -9,12 +9,16 @@ import { BaseAgentDriver, type AgentProcess, AgentProcessImpl } from './base.js'
 function resolveClaudeSpawn(): { cmd: string; prefixArgs: string[]; shell: boolean } {
   const isWin = process.platform === 'win32';
   try {
-    const npmGlobalRoot = execSync('npm root -g', { timeout: 5000, stdio: 'pipe' }).toString().trim();
+    const npmGlobalRoot = execSync('npm root -g', { timeout: 5000, stdio: 'pipe' })
+      .toString()
+      .trim();
     const cliPath = path.join(npmGlobalRoot, '@anthropic-ai', 'claude-code', 'cli.js');
     if (fs.existsSync(cliPath)) {
       return { cmd: process.execPath, prefixArgs: [cliPath], shell: false };
     }
-  } catch { /* fallback */ }
+  } catch {
+    /* fallback */
+  }
   return { cmd: 'claude', prefixArgs: [], shell: isWin };
 }
 
@@ -23,13 +27,19 @@ export class ClaudeCodeDriver extends BaseAgentDriver {
   binary = 'claude';
   capabilities = ['code', 'analysis', 'general', 'typescript', 'javascript', 'python'];
 
-  private spawnCfg = { cmd: 'claude', prefixArgs: [] as string[], shell: process.platform === 'win32' };
+  private spawnCfg = {
+    cmd: 'claude',
+    prefixArgs: [] as string[],
+    shell: process.platform === 'win32',
+  };
 
   async detect(): Promise<boolean> {
     try {
       execSync('claude --version', { timeout: 5000, stdio: 'pipe' });
       this.spawnCfg = resolveClaudeSpawn();
-      console.log(`[claude-driver] Spawn: cmd=${this.spawnCfg.cmd} shell=${this.spawnCfg.shell} prefix=[${this.spawnCfg.prefixArgs}]`);
+      console.log(
+        `[claude-driver] Spawn: cmd=${this.spawnCfg.cmd} shell=${this.spawnCfg.shell} prefix=[${this.spawnCfg.prefixArgs}]`,
+      );
       return true;
     } catch {
       return false;

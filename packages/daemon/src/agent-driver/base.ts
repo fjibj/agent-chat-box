@@ -34,14 +34,14 @@ export class AgentProcessImpl implements AgentProcess {
     proc.stdout?.on('data', (data: Buffer) => {
       const chunk = data.toString();
       this.outputChunks.push(chunk);
-      this.outputCallbacks.forEach(cb => cb(chunk));
+      this.outputCallbacks.forEach((cb) => cb(chunk));
     });
 
     // Collect stderr
     proc.stderr?.on('data', (data: Buffer) => {
       const chunk = data.toString();
       this.outputChunks.push(chunk);
-      this.outputCallbacks.forEach(cb => cb(chunk));
+      this.outputCallbacks.forEach((cb) => cb(chunk));
     });
 
     // Handle completion
@@ -51,13 +51,13 @@ export class AgentProcessImpl implements AgentProcess {
         output: this.outputChunks.join(''),
         exitCode: code ?? 1,
       };
-      this.completeCallbacks.forEach(cb => cb(result));
+      this.completeCallbacks.forEach((cb) => cb(result));
     });
 
     // Handle errors
     proc.on('error', (err) => {
       this.status = 'failed';
-      this.errorCallbacks.forEach(cb => cb(err));
+      this.errorCallbacks.forEach((cb) => cb(err));
     });
   }
 
@@ -102,7 +102,9 @@ export abstract class BaseAgentDriver {
         if (result.exitCode === 0) {
           resolve(chunks.join('').trim());
         } else {
-          reject(new Error(`Agent exited with code ${result.exitCode}: ${result.output.slice(0, 200)}`));
+          reject(
+            new Error(`Agent exited with code ${result.exitCode}: ${result.output.slice(0, 200)}`),
+          );
         }
       });
       proc.onError((err) => reject(err));
@@ -148,5 +150,5 @@ export async function getAvailableDrivers(): Promise<BaseAgentDriver[]> {
 
 /** Get driver by name */
 export function getDriver(name: string): BaseAgentDriver | undefined {
-  return drivers.find(d => d.name === name);
+  return drivers.find((d) => d.name === name);
 }
