@@ -1,0 +1,18 @@
+{
+  "cookies": [],
+  "origins": [
+    {
+      "origin": "http://localhost:3000",
+      "localStorage": [
+        {
+          "name": "acb-username",
+          "value": "E2ETestUser"
+        },
+        {
+          "name": "acb-humanId",
+          "value": "a8453711-e03f-45c9-9783-ac513469fd2a"
+        }
+      ]
+    }
+  ]
+}
