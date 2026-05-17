@@ -33,20 +33,20 @@
 
 ```
 ┌─────────────────────────────────────────────────────┐
-│                   Web UI (React)                     │
-│   Chat | Tasks | Groups | Authorizations | Agents    │
+│                   Web UI (React)                    │
+│   Chat | Tasks | Groups | Authorizations | Agents   │
 └────────────────────────┬────────────────────────────┘
                          │ WebSocket + REST API
 ┌────────────────────────┴────────────────────────────┐
-│                Central Server (Fastify)              │
-│  TaskQueue | AgentReg | MsgRouter | GroupManager     │
-│  Federation Hub | Reputation | AuthorizationGate     │
+│                Central Server (Fastify)             │
+│  TaskQueue | AgentReg | MsgRouter | GroupManager    │
+│  Federation Hub | Reputation | AuthorizationGate    │
 └──────┬──────────────┬──────────────┬────────────────┘
        │              │              │
-┌──────┴──────┐ ┌─────┴──────┐ ┌────┴───────┐
-│  Daemon A   │ │  Daemon B  │ │  Daemon C  │
-│ Claude Code │ │ Codex      │ │ OpenClaw   │
-└─────────────┘ └────────────┘ └────────────┘
+┌──────┴──────┐ ┌─────┴──────┐  ┌────┴───────┐
+│  Daemon A   │ │  Daemon B  │  │  Daemon C  │
+│ Claude Code │ │ Codex      │  │ OpenClaw   │
+└─────────────┘ └────────────┘  └────────────┘
 ```
 
 ### 联邦拓扑（跨团队）
@@ -56,7 +56,7 @@
                     (群主团队托管)
                          ↑
         ┌────────────────┼────────────────┐
-        │ WSS (反向连接)   │ WSS (反向连接)   │ WSS (反向连接)
+        │ WSS (反向连接)  │ WSS (反向连接)  │ WSS (反向连接)
         ↓                ↓                ↓
    [团队A Server]   [团队B Server]   [团队C Server]
         ↑                ↑                ↑
@@ -136,7 +136,7 @@ agent-chat-box/
 - [联邦网关 PRD](docs/prd-federation-gateway-2026-05-16.md)
 - [Sprint 计划](docs/sprint-plan-agent-chat-box-2026-05-01.md)
 - [验证记录](docs/manual-verification.md)
-- [用户故事](docs/stories/) — 61 个故事 (STORY-001~035, STORY-G001~G026, STORY-F001~F010)
+- [用户故事](docs/stories/) — 61 个故事 (STORY-001 ~ 035, STORY-G001 ~ G026, STORY-F001 ~ F010)
 - [测试报告](docs/test-artifacts/)
 - [联邦网络拓扑分析](docs/federation-network-topology-analysis.md)
 - [联邦 E2E 测试指南](docs/federation-e2e-manual-test-guide.md)
