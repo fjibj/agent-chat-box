@@ -3,13 +3,15 @@ import { getRecentMessages } from '../api/messages.js';
 import { getClients } from '../ws/handler.js';
 import type { Agent, Message, WSMessage } from '@agent-chat-box/shared';
 
-export type WakeTrigger = 'mention' | 'dm' | 'task_assigned' | 'manual';
+export type WakeTrigger = 'mention' | 'dm' | 'task_assigned' | 'manual' | 'federation_claim';
 
 export interface WakeContext {
   trigger: WakeTrigger;
   channelId?: string;
   taskId?: string;
   recentMessages: Message[];
+  sourceTeamId?: string;
+  title?: string;
 }
 
 /** Update agent status in database */
@@ -31,7 +33,7 @@ export function updateAgentStatus(agentId: string, status: Agent['status']): voi
 function getAgent(agentId: string): Agent | null {
   const db = getDatabase();
   const stmt = db.prepare(
-    'SELECT id, machine_id, name, runtime, status, capabilities, role_card, current_task_id, last_sleep_at, last_wake_at FROM agents WHERE id = ?'
+    'SELECT id, machine_id, name, runtime, status, capabilities, role_card, labels, current_task_id, last_sleep_at, last_wake_at FROM agents WHERE id = ?',
   );
   stmt.bind([agentId]);
 
@@ -50,7 +52,8 @@ function getAgent(agentId: string): Agent | null {
     runtime: row.runtime as Agent['runtime'],
     status: row.status as Agent['status'],
     roleCard: JSON.parse(row.role_card as string),
-    capabilities: JSON.parse(row.capabilities as string || '[]'),
+    capabilities: JSON.parse((row.capabilities as string) || '[]'),
+    labels: JSON.parse((row.labels as string) || '[]'),
     currentTaskId: row.current_task_id as string | undefined,
     lastSleepAt: row.last_sleep_at as number | undefined,
     lastWakeAt: row.last_wake_at as number | undefined,
@@ -77,7 +80,13 @@ export function shouldWakeAgent(agentId: string, message: Message): boolean {
 }
 
 /** Wake an agent with context */
-export function wakeAgent(agentId: string, trigger: WakeTrigger, channelId?: string, taskId?: string): void {
+export function wakeAgent(
+  agentId: string,
+  trigger: WakeTrigger,
+  channelId?: string,
+  taskId?: string,
+  extraContext?: { title?: string; sourceTeamId?: string },
+): void {
   const agent = getAgent(agentId);
   if (!agent) return;
 
@@ -91,6 +100,8 @@ export function wakeAgent(agentId: string, trigger: WakeTrigger, channelId?: str
     channelId,
     taskId,
     recentMessages,
+    title: extraContext?.title,
+    sourceTeamId: extraContext?.sourceTeamId,
   };
 
   // Find daemon client for this agent's machine

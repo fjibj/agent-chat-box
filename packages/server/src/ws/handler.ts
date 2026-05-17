@@ -23,9 +23,23 @@ export interface Client {
 
 const clients = new Map<string, Client>();
 
+// Group broadcast maps
+const groupTeams = new Map<string, Set<string>>(); // groupId → Set<teamId>
+const teamClients = new Map<string, Set<string>>(); // teamId → Set<clientId>
+
 /** Get all connected clients. */
 export function getClients(): Map<string, Client> {
   return clients;
+}
+
+/** Get group teams map (for testing). */
+export function getGroupTeams(): Map<string, Set<string>> {
+  return groupTeams;
+}
+
+/** Get team clients map (for testing). */
+export function getTeamClients(): Map<string, Set<string>> {
+  return teamClients;
 }
 
 /** Get a specific client by id. */
@@ -52,7 +66,12 @@ export function broadcast(msg: WSMessage): void {
 }
 
 /** Send error response to a client. */
-export function sendError(client: Client, id: string | undefined, code: string, message: string): void {
+export function sendError(
+  client: Client,
+  id: string | undefined,
+  code: string,
+  message: string,
+): void {
   const msg: WSMessage = {
     v: 1,
     id,
@@ -99,7 +118,10 @@ export function handleConnection(ws: WebSocket, type: 'human' | 'daemon'): Clien
     // Set machine offline only if no other active connection for same machine
     if (client.machineId) {
       const hasOtherConnection = Array.from(clients.values()).some(
-        c => c.id !== clientId && c.machineId === client.machineId && c.ws.readyState === WebSocket.OPEN
+        (c) =>
+          c.id !== clientId &&
+          c.machineId === client.machineId &&
+          c.ws.readyState === WebSocket.OPEN,
       );
       if (!hasOtherConnection) {
         const db = getDatabase();
@@ -114,10 +136,44 @@ export function handleConnection(ws: WebSocket, type: 'human' | 'daemon'): Clien
     // Clean up human members from channels on disconnect
     if (type === 'human') {
       const db = getDatabase();
-      db.run('DELETE FROM channel_members WHERE member_id = ? AND member_kind = ?', [clientId, 'human']);
+      db.run('DELETE FROM channel_members WHERE member_id = ? AND member_kind = ?', [
+        clientId,
+        'human',
+      ]);
       db.save();
       console.log(`[ws] Cleaned up human member: ${clientId}`);
     }
+
+    // Release group tasks claimed by this client's agents on disconnect
+    if (client.agentIds && client.agentIds.length > 0) {
+      const db = getDatabase();
+      for (const agentId of client.agentIds) {
+        // Find group tasks claimed by this agent
+        const stmt = db.prepare(`
+          SELECT t.id, gt.group_id FROM tasks t
+          JOIN group_tasks gt ON t.id = gt.task_id
+          WHERE t.assignee_id = ? AND t.status IN ('claimed', 'running')
+        `);
+        stmt.bind([agentId]);
+        const tasks: Array<{ id: string; group_id: string }> = [];
+        while (stmt.step()) {
+          tasks.push(stmt.getAsObject() as { id: string; group_id: string });
+        }
+        stmt.free();
+
+        for (const task of tasks) {
+          db.run("UPDATE tasks SET status = 'pending', assignee_id = NULL WHERE id = ?", [task.id]);
+          db.run("UPDATE group_tasks SET authorization_status = 'none' WHERE task_id = ?", [task.id]);
+          console.log(`[ws] Released group task ${task.id} from disconnected agent ${agentId}`);
+        }
+        if (tasks.length > 0) {
+          db.save();
+        }
+      }
+    }
+
+    // Clean up team-clients mapping
+    updateTeamClientsMapping(clientId, null);
 
     clients.delete(clientId);
     console.log(`[ws] ${type} disconnected: ${clientId} (total: ${clients.size})`);
@@ -151,7 +207,8 @@ export function handleConnection(ws: WebSocket, type: 'human' | 'daemon'): Clien
 }
 
 /** Validate WSMessage envelope structure. */
-function isValidEnvelope(msg: any): msg is WSMessage { // eslint-disable-line @typescript-eslint/no-explicit-any -- type guard needs any for narrowing
+function isValidEnvelope(msg: any): msg is WSMessage {
+  // eslint-disable-line @typescript-eslint/no-explicit-any -- type guard needs any for narrowing
   return (
     typeof msg === 'object' &&
     msg !== null &&
@@ -259,7 +316,11 @@ function handleMachineAuth(client: Client, msg: WSMessage): void {
 
   // Update machine status to online
   const db = getDatabase();
-  db.run('UPDATE machines SET status = ?, last_heartbeat = ? WHERE id = ?', ['online', Date.now(), machine.id]);
+  db.run('UPDATE machines SET status = ?, last_heartbeat = ? WHERE id = ?', [
+    'online',
+    Date.now(),
+    machine.id,
+  ]);
   db.save();
 
   console.log(`[ws] Machine authenticated: ${machine.name} (${machine.id})`);
@@ -295,6 +356,7 @@ function handleAgentHello(client: Client, msg: WSMessage): void {
     runtime?: string;
     role_card?: RoleCard;
     capabilities?: string[];
+    labels?: string[];
   };
 
   if (!data.name || !data.runtime || !data.role_card) {
@@ -307,6 +369,7 @@ function handleAgentHello(client: Client, msg: WSMessage): void {
     runtime: data.runtime,
     roleCard: data.role_card,
     capabilities: data.capabilities || [],
+    labels: data.labels || [],
   });
 
   if (!agent) {
@@ -318,6 +381,11 @@ function handleAgentHello(client: Client, msg: WSMessage): void {
   if (!client.agentIds) client.agentIds = [];
   if (!client.agentIds.includes(agent.id)) {
     client.agentIds.push(agent.id);
+  }
+
+  // Update team-clients mapping for group broadcast
+  if (agent.teamId) {
+    updateTeamClientsMapping(client.id, agent.teamId);
   }
 
   console.log(`[ws] Agent registered: ${agent.name} (${agent.id}) on machine ${client.machineId}`);
@@ -344,7 +412,8 @@ function handleChannelJoin(client: Client, msg: WSMessage): void {
   }
 
   // Determine member ID and kind
-  const memberId = client.type === 'daemon' ? (client.agentIds?.[0] || client.machineId || client.id) : client.id;
+  const memberId =
+    client.type === 'daemon' ? client.agentIds?.[0] || client.machineId || client.id : client.id;
   const memberKind = client.type === 'daemon' ? 'agent' : 'human';
 
   addChannelMember(data.channel_id, memberId, memberKind);
@@ -372,7 +441,8 @@ function handleChannelLeave(client: Client, msg: WSMessage): void {
     return;
   }
 
-  const memberId = client.type === 'daemon' ? (client.agentIds?.[0] || client.machineId || client.id) : client.id;
+  const memberId =
+    client.type === 'daemon' ? client.agentIds?.[0] || client.machineId || client.id : client.id;
   removeChannelMember(data.channel_id, memberId);
 
   console.log(`[ws] ${client.type} ${memberId} left channel ${data.channel_id}`);
@@ -436,7 +506,11 @@ function handleHumanIdentify(client: Client, msg: WSMessage): void {
 
     // Update channel_members to use new ID
     const db = getDatabase();
-    db.run('UPDATE channel_members SET member_id = ? WHERE member_id = ? AND member_kind = ?', [client.id, oldId, 'human']);
+    db.run('UPDATE channel_members SET member_id = ? WHERE member_id = ? AND member_kind = ?', [
+      client.id,
+      oldId,
+      'human',
+    ]);
     db.save();
 
     console.log(`[ws] Human ${oldId} → ${client.id} identified as: ${client.name}`);
@@ -469,7 +543,8 @@ function handleMessageSend(client: Client, msg: WSMessage): void {
   }
 
   // Determine sender ID and name
-  const senderId = client.type === 'daemon' ? (client.agentIds?.[0] || client.machineId || client.id) : client.id;
+  const senderId =
+    client.type === 'daemon' ? client.agentIds?.[0] || client.machineId || client.id : client.id;
   const senderKind = client.type === 'daemon' ? 'agent' : 'human';
 
   // Resolve senderName before saving
@@ -536,7 +611,8 @@ function handleTaskCreate(client: Client, msg: WSMessage): void {
     return;
   }
 
-  const creatorId = client.type === 'daemon' ? (client.agentIds?.[0] || client.machineId || client.id) : client.id;
+  const creatorId =
+    client.type === 'daemon' ? client.agentIds?.[0] || client.machineId || client.id : client.id;
 
   const task = createTask(
     {
@@ -550,7 +626,7 @@ function handleTaskCreate(client: Client, msg: WSMessage): void {
       timeoutSeconds: data.timeout_seconds,
       maxRetries: data.max_retries,
     },
-    creatorId
+    creatorId,
   );
 
   sendTo(client.id, {
@@ -572,7 +648,8 @@ function handleTaskClaim(client: Client, msg: WSMessage): void {
     return;
   }
 
-  const agentId = client.type === 'daemon' ? (client.agentIds?.[0] || client.machineId || client.id) : client.id;
+  const agentId =
+    client.type === 'daemon' ? client.agentIds?.[0] || client.machineId || client.id : client.id;
   const result = claimTask(data.task_id, agentId);
 
   if (result.success) {
@@ -585,7 +662,12 @@ function handleTaskClaim(client: Client, msg: WSMessage): void {
     });
     console.log(`[ws] Task claimed: ${data.task_id} by agent ${agentId}`);
   } else {
-    sendError(client, msg.id, result.error || 'CLAIM_FAILED', `Failed to claim task: ${result.error}`);
+    sendError(
+      client,
+      msg.id,
+      result.error || 'CLAIM_FAILED',
+      `Failed to claim task: ${result.error}`,
+    );
   }
 }
 
@@ -631,16 +713,22 @@ function handleTaskUpdate(client: Client, msg: WSMessage): void {
 }
 
 /** Broadcast message to all clients in a channel (except excludeId) */
-export function broadcastToChannel(channelId: string, type: string, data: unknown, excludeId?: string): void {
+export function broadcastToChannel(
+  channelId: string,
+  type: string,
+  data: unknown,
+  excludeId?: string,
+): void {
   const members = getChannelMembers(channelId);
-  const memberIds = new Set(members.map(m => m.memberId));
+  const memberIds = new Set(members.map((m) => m.memberId));
 
   for (const [clientId, client] of clients.entries()) {
     if (clientId === excludeId) continue;
     if (client.ws.readyState !== WebSocket.OPEN) continue;
 
     // Check if client is a member (human or daemon with agent in channel)
-    const clientMemberId = client.type === 'daemon' ? (client.agentIds?.[0] || client.machineId || client.id) : client.id;
+    const clientMemberId =
+      client.type === 'daemon' ? client.agentIds?.[0] || client.machineId || client.id : client.id;
     if (memberIds.has(clientMemberId)) {
       sendTo(clientId, {
         v: 1,
@@ -649,6 +737,72 @@ export function broadcastToChannel(channelId: string, type: string, data: unknow
         data,
       });
     }
+  }
+}
+
+/** Broadcast message to all clients in a group */
+export function broadcastToGroup(
+  groupId: string,
+  type: string,
+  data: unknown,
+  excludeId?: string,
+): void {
+  const teamIds = groupTeams.get(groupId);
+  if (!teamIds) return;
+
+  const payload = JSON.stringify({
+    v: 1,
+    type,
+    ts: Date.now(),
+    data,
+  });
+
+  for (const teamId of teamIds) {
+    const clientIds = teamClients.get(teamId);
+    if (!clientIds) continue;
+
+    for (const clientId of clientIds) {
+      if (clientId === excludeId) continue;
+      const client = clients.get(clientId);
+      if (client?.ws.readyState === WebSocket.OPEN) {
+        client.ws.send(payload);
+      }
+    }
+  }
+}
+
+/** Update group-teams mapping from database */
+export function refreshGroupTeamsMap(): void {
+  const db = getDatabase();
+  groupTeams.clear();
+
+  const stmt = db.prepare('SELECT group_id, team_id FROM group_members');
+  while (stmt.step()) {
+    const row = stmt.getAsObject() as { group_id: string; team_id: string };
+    if (!groupTeams.has(row.group_id)) {
+      groupTeams.set(row.group_id, new Set());
+    }
+    groupTeams.get(row.group_id)!.add(row.team_id);
+  }
+  stmt.free();
+}
+
+/** Update team-clients mapping for a daemon client */
+export function updateTeamClientsMapping(clientId: string, teamId: string | null): void {
+  // Remove from old team mapping
+  for (const [tid, cids] of teamClients.entries()) {
+    cids.delete(clientId);
+    if (cids.size === 0) {
+      teamClients.delete(tid);
+    }
+  }
+
+  // Add to new team mapping
+  if (teamId) {
+    if (!teamClients.has(teamId)) {
+      teamClients.set(teamId, new Set());
+    }
+    teamClients.get(teamId)!.add(clientId);
   }
 }
 

@@ -1,14 +1,15 @@
 import crypto from 'crypto';
+import yaml from 'js-yaml';
 import { getDatabase } from '../db/index.js';
 import type { Task, CreateTaskInput, UpdateTaskInput, ClaimResult } from '@agent-chat-box/shared';
-import { broadcastToChannel } from '../ws/handler.js';
+import { broadcastToChannel, broadcastToGroup, sendTo } from '../ws/handler.js';
 import { TASK_TIMEOUT_CHECK_INTERVAL_MS } from '@agent-chat-box/shared';
 
 /** Get task by ID */
 export function getTask(taskId: string): Task | null {
   const db = getDatabase();
   const stmt = db.prepare(
-    'SELECT id, channel_id, title, description, priority, mode, status, tags, creator_id, assignee_id, parent_task_id, depth, required_capabilities, output, timeout_seconds, max_retries, retry_count, created_at, claimed_at, completed_at FROM tasks WHERE id = ?'
+    'SELECT id, channel_id, title, description, priority, mode, status, tags, creator_id, assignee_id, parent_task_id, depth, required_capabilities, output, timeout_seconds, max_retries, retry_count, created_at, claimed_at, completed_at FROM tasks WHERE id = ?',
   );
   stmt.bind([taskId]);
 
@@ -24,23 +25,25 @@ export function getTask(taskId: string): Task | null {
     id: row.id as string,
     channelId: row.channel_id as string,
     title: row.title as string,
-    description: row.description as string | undefined,
+    description: (row.description as string | null) ?? undefined,
     priority: row.priority as Task['priority'],
     mode: row.mode as Task['mode'],
     status: row.status as Task['status'],
     tags: row.tags ? JSON.parse(row.tags as string) : undefined,
     creatorId: row.creator_id as string,
-    assigneeId: row.assignee_id as string | undefined,
-    parentTaskId: row.parent_task_id as string | undefined,
+    assigneeId: (row.assignee_id as string | null) ?? undefined,
+    parentTaskId: (row.parent_task_id as string | null) ?? undefined,
     depth: (row.depth as number) ?? 0,
-    requiredCapabilities: row.required_capabilities ? JSON.parse(row.required_capabilities as string) : undefined,
-    output: row.output as string | undefined,
+    requiredCapabilities: row.required_capabilities
+      ? JSON.parse(row.required_capabilities as string)
+      : undefined,
+    output: (row.output as string | null) ?? undefined,
     timeoutSeconds: row.timeout_seconds as number,
     maxRetries: row.max_retries as number,
     retryCount: row.retry_count as number,
     createdAt: row.created_at as number,
-    claimedAt: row.claimed_at as number | undefined,
-    completedAt: row.completed_at as number | undefined,
+    claimedAt: (row.claimed_at as number | null) ?? undefined,
+    completedAt: (row.completed_at as number | null) ?? undefined,
   };
 }
 
@@ -52,7 +55,8 @@ export function createTask(input: CreateTaskInput, creatorId: string): Task {
   const mode = input.mode || 'compete';
 
   // For assign/collaborate mode with assigneeId, create as 'claimed' directly
-  const initialStatus = (input.assigneeId && (mode === 'assign' || mode === 'collaborate')) ? 'claimed' : 'pending';
+  const initialStatus =
+    input.assigneeId && (mode === 'assign' || mode === 'collaborate') ? 'claimed' : 'pending';
 
   db.run(
     `INSERT INTO tasks (id, channel_id, title, description, priority, mode, status, tags, creator_id, assignee_id, required_capabilities, timeout_seconds, max_retries, created_at, claimed_at)
@@ -73,7 +77,7 @@ export function createTask(input: CreateTaskInput, creatorId: string): Task {
       input.maxRetries || 0,
       now,
       initialStatus === 'claimed' ? now : null,
-    ]
+    ],
   );
   db.save();
 
@@ -90,13 +94,13 @@ export function createTaskWithParent(
   input: CreateTaskInput,
   creatorId: string,
   parentTaskId: string,
-  depth: number
+  depth: number,
 ): Task {
   const db = getDatabase();
   const id = crypto.randomUUID();
   const now = Date.now();
   const mode = input.mode || 'compete';
-  const initialStatus = (mode === 'assign' && input.assigneeId) ? 'claimed' : 'pending';
+  const initialStatus = mode === 'assign' && input.assigneeId ? 'claimed' : 'pending';
 
   db.run(
     `INSERT INTO tasks (id, channel_id, title, description, priority, mode, status, tags, creator_id, assignee_id, parent_task_id, depth, required_capabilities, timeout_seconds, max_retries, created_at, claimed_at)
@@ -119,7 +123,7 @@ export function createTaskWithParent(
       input.maxRetries || 0,
       now,
       initialStatus === 'claimed' ? now : null,
-    ]
+    ],
   );
   db.save();
 
@@ -134,14 +138,15 @@ export function createTaskWithParent(
 export function assignTask(taskId: string, agentId: string): ClaimResult {
   const task = getTask(taskId);
   if (!task) return { success: false, error: 'NOT_FOUND' };
-  if (task.status !== 'pending') return { success: false, error: 'ALREADY_CLAIMED', claimedBy: task.assigneeId };
+  if (task.status !== 'pending')
+    return { success: false, error: 'ALREADY_CLAIMED', claimedBy: task.assigneeId };
 
   const db = getDatabase();
   const now = Date.now();
 
   db.run(
     `UPDATE tasks SET status = 'claimed', assignee_id = ?, claimed_at = ? WHERE id = ? AND status = 'pending'`,
-    [agentId, now, taskId]
+    [agentId, now, taskId],
   );
   db.save();
 
@@ -164,7 +169,8 @@ export function claimTask(taskId: string, agentId: string): ClaimResult {
   // Check task exists and get requirements
   const task = getTask(taskId);
   if (!task) return { success: false, error: 'NOT_FOUND' };
-  if (task.status !== 'pending') return { success: false, error: 'ALREADY_CLAIMED', claimedBy: task.assigneeId };
+  if (task.status !== 'pending')
+    return { success: false, error: 'ALREADY_CLAIMED', claimedBy: task.assigneeId };
 
   // Check capability match
   if (task.requiredCapabilities && task.requiredCapabilities.length > 0) {
@@ -178,7 +184,7 @@ export function claimTask(taskId: string, agentId: string): ClaimResult {
     agentStmt.free();
 
     const agentCapabilities: string[] = JSON.parse(agentRow.capabilities || '[]');
-    const hasAll = task.requiredCapabilities.every(cap => agentCapabilities.includes(cap));
+    const hasAll = task.requiredCapabilities.every((cap) => agentCapabilities.includes(cap));
     if (!hasAll) {
       return { success: false, error: 'CAPABILITY_MISMATCH' };
     }
@@ -190,7 +196,7 @@ export function claimTask(taskId: string, agentId: string): ClaimResult {
     db.run(
       `UPDATE tasks SET status = 'claimed', assignee_id = ?, claimed_at = ?
        WHERE id = ? AND status = 'pending'`,
-      [agentId, now, taskId]
+      [agentId, now, taskId],
     );
 
     const result = db.exec('SELECT changes() as changes');
@@ -200,7 +206,8 @@ export function claimTask(taskId: string, agentId: string): ClaimResult {
       db.run('ROLLBACK');
       const task = getTask(taskId);
       if (!task) return { success: false, error: 'NOT_FOUND' };
-      if (task.status !== 'pending') return { success: false, error: 'ALREADY_CLAIMED', claimedBy: task.assigneeId };
+      if (task.status !== 'pending')
+        return { success: false, error: 'ALREADY_CLAIMED', claimedBy: task.assigneeId };
       return { success: false, error: 'ALREADY_CLAIMED' };
     }
 
@@ -268,18 +275,91 @@ export function updateTask(taskId: string, input: UpdateTaskInput): Task | null 
       const db2 = getDatabase();
       db2.run(
         "UPDATE tasks SET status = 'pending', assignee_id = NULL, retry_count = retry_count + 1, output = NULL WHERE id = ?",
-        [taskId]
+        [taskId],
       );
       db2.save();
       const retriedTask = getTask(taskId)!;
       broadcastToChannel(retriedTask.channelId, 'task.created', { task: retriedTask });
-      console.log(`[task] Auto-retrying task ${taskId} (attempt ${retriedTask.retryCount}/${retriedTask.maxRetries})`);
+      console.log(
+        `[task] Auto-retrying task ${taskId} (attempt ${retriedTask.retryCount}/${retriedTask.maxRetries})`,
+      );
       return retriedTask;
     }
 
     // When releasing back to pending, broadcast as task.created so daemons can claim it
-    const broadcastType = input.status === 'pending' ? 'task.created' : `task.${input.status || 'updated'}`;
+    const broadcastType =
+      input.status === 'pending' ? 'task.created' : `task.${input.status || 'updated'}`;
     broadcastToChannel(task.channelId, broadcastType, { task });
+
+    // Cross-team output return: if group task completed, send output to decomposer
+    if (input.status === 'completed') {
+      const db4 = getDatabase();
+      const gtStmt2 = db4.prepare(`
+        SELECT gt.group_id, gt.source_team_id, g.contract_yaml
+        FROM group_tasks gt
+        JOIN groups g ON gt.group_id = g.id
+        WHERE gt.task_id = ?
+      `);
+      gtStmt2.bind([taskId]);
+      if (gtStmt2.step()) {
+        const gtRow = gtStmt2.getAsObject() as { group_id: string; source_team_id: string; contract_yaml: string };
+        gtStmt2.free();
+
+        // Check visibility.task_output setting
+        let sendOutput = true;
+        try {
+          const contract = yaml.load(gtRow.contract_yaml || '') as Record<string, unknown>;
+          const visibility = contract.visibility as Record<string, unknown> | undefined;
+          if (visibility && visibility.task_output === false) {
+            sendOutput = false;
+          }
+        } catch {
+          // Default to sending output
+        }
+
+        if (sendOutput) {
+          // Find parent task (decomposer)
+          if (task.parentTaskId) {
+            const parentTask = getTask(task.parentTaskId);
+            if (parentTask) {
+              // Send review.requested to source team via WebSocket
+              broadcastToGroup(gtRow.group_id, 'review.requested', {
+                task_id: taskId,
+                parent_task_id: task.parentTaskId,
+                output: task.output,
+                completed_at: task.completedAt,
+                source_agent_id: task.assigneeId,
+              });
+              console.log(`[task] Group task ${taskId} output sent to decomposer (parent: ${task.parentTaskId})`);
+            }
+          }
+        }
+      } else {
+        gtStmt2.free();
+      }
+    }
+
+    // Cross-team retry: if group task failed, reset to pending for re-claim
+    if (input.status === 'failed' && task.retryCount >= task.maxRetries) {
+      const db3 = getDatabase();
+      const gtStmt = db3.prepare('SELECT group_id, source_team_id FROM group_tasks WHERE task_id = ?');
+      gtStmt.bind([taskId]);
+      if (gtStmt.step()) {
+        const gt = gtStmt.getAsObject() as { group_id: string; source_team_id: string };
+        gtStmt.free();
+
+        // Reset task to pending for other agents to claim
+        db3.run("UPDATE tasks SET status = 'pending', assignee_id = NULL WHERE id = ?", [taskId]);
+        db3.run("UPDATE group_tasks SET authorization_status = 'none' WHERE task_id = ?", [taskId]);
+        db3.save();
+
+        // Broadcast to group
+        broadcastToGroup(gt.group_id, 'group.task.created', { task: getTask(taskId) });
+        console.log(`[task] Group task ${taskId} failed, returned to pool for re-claim`);
+      } else {
+        gtStmt.free();
+      }
+    }
   }
 
   return task;
@@ -288,8 +368,15 @@ export function updateTask(taskId: string, input: UpdateTaskInput): Task | null 
 /** Create subtasks for collaborative mode with depth tracking */
 export function createSubtasks(
   parentTaskId: string,
-  subtasks: Array<{ channelId: string; title: string; description?: string; assigneeId?: string; creatorId: string; mode?: 'compete' | 'assign' }>,
-  maxRetries?: number
+  subtasks: Array<{
+    channelId: string;
+    title: string;
+    description?: string;
+    assigneeId?: string;
+    creatorId: string;
+    mode?: 'compete' | 'assign';
+  }>,
+  maxRetries?: number,
 ): Task[] {
   const parentTask = getTask(parentTaskId);
   if (!parentTask) return [];
@@ -320,7 +407,7 @@ export function createSubtasks(
       },
       st.creatorId,
       parentTaskId,
-      childDepth
+      childDepth,
     );
     createdTasks.push(task);
   }
@@ -345,7 +432,9 @@ export function getTaskTree(taskId: string): { task: Task; children: Task[] } | 
   while (queue.length > 0) {
     const parentId = queue.shift()!;
     const db = getDatabase();
-    const stmt = db.prepare('SELECT id FROM tasks WHERE parent_task_id = ? ORDER BY created_at ASC');
+    const stmt = db.prepare(
+      'SELECT id FROM tasks WHERE parent_task_id = ? ORDER BY created_at ASC',
+    );
     stmt.bind([parentId]);
 
     while (stmt.step()) {
@@ -366,7 +455,7 @@ export function getTaskTree(taskId: string): { task: Task; children: Task[] } | 
 export function checkParentCompletion(parentTaskId: string): void {
   const db = getDatabase();
   const stmt = db.prepare(
-    "SELECT COUNT(*) as total, SUM(CASE WHEN status = 'completed' THEN 1 ELSE 0 END) as completed, SUM(CASE WHEN status = 'failed' THEN 1 ELSE 0 END) as failed FROM tasks WHERE parent_task_id = ?"
+    "SELECT COUNT(*) as total, SUM(CASE WHEN status = 'completed' THEN 1 ELSE 0 END) as completed, SUM(CASE WHEN status = 'failed' THEN 1 ELSE 0 END) as failed FROM tasks WHERE parent_task_id = ?",
   );
   stmt.bind([parentTaskId]);
 
@@ -389,7 +478,7 @@ export function checkParentCompletion(parentTaskId: string): void {
             // Retry: reset to pending
             db.run(
               "UPDATE tasks SET status = 'pending', assignee_id = NULL, retry_count = retry_count + 1 WHERE id = ?",
-              [ft.id]
+              [ft.id],
             );
             retried = true;
           }
@@ -399,7 +488,7 @@ export function checkParentCompletion(parentTaskId: string): void {
         if (retried) {
           broadcastToChannel(parentTask.channelId, 'task.retrying', {
             parentTaskId,
-            retriedCount: failedTasks.filter(ft => ft.retryCount < parentMaxRetries).length,
+            retriedCount: failedTasks.filter((ft) => ft.retryCount < parentMaxRetries).length,
           });
           // Don't finalize parent yet — wait for retries
           return;
@@ -418,9 +507,7 @@ export function checkParentCompletion(parentTaskId: string): void {
 function getFailedSubtasks(parentTaskId: string): Task[] {
   const db = getDatabase();
   const tasks: Task[] = [];
-  const stmt = db.prepare(
-    "SELECT id FROM tasks WHERE parent_task_id = ? AND status = 'failed'"
-  );
+  const stmt = db.prepare("SELECT id FROM tasks WHERE parent_task_id = ? AND status = 'failed'");
   stmt.bind([parentTaskId]);
 
   while (stmt.step()) {
@@ -463,7 +550,7 @@ export function getTasksByAgent(agentId: string): Task[] {
   const db = getDatabase();
   const tasks: Task[] = [];
   const stmt = db.prepare(
-    "SELECT id FROM tasks WHERE assignee_id = ? AND status IN ('claimed', 'running') ORDER BY created_at DESC"
+    "SELECT id FROM tasks WHERE assignee_id = ? AND status IN ('claimed', 'running') ORDER BY created_at DESC",
   );
   stmt.bind([agentId]);
 
@@ -491,9 +578,19 @@ export function checkTimeouts(): void {
   `);
   stmt.bind([now]);
 
-  const expiredTasks: Array<{ id: string; channel_id: string; retry_count: number; max_retries: number }> = [];
+  const expiredTasks: Array<{
+    id: string;
+    channel_id: string;
+    retry_count: number;
+    max_retries: number;
+  }> = [];
   while (stmt.step()) {
-    const row = stmt.getAsObject() as { id: string; channel_id: string; retry_count: number; max_retries: number };
+    const row = stmt.getAsObject() as {
+      id: string;
+      channel_id: string;
+      retry_count: number;
+      max_retries: number;
+    };
     expiredTasks.push(row);
   }
   stmt.free();
@@ -503,7 +600,7 @@ export function checkTimeouts(): void {
       // Retry: reset to pending
       db.run(
         "UPDATE tasks SET status = 'pending', assignee_id = NULL, retry_count = retry_count + 1 WHERE id = ?",
-        [task.id]
+        [task.id],
       );
       db.save();
 

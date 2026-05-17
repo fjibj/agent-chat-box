@@ -109,15 +109,17 @@ export async function createDatabase(): Promise<DatabaseWrapper> {
 
 function migrate(db: DatabaseWrapper): void {
   const result = db.exec('PRAGMA user_version');
-  const version = result.length > 0 && result[0].values.length > 0
-    ? (result[0].values[0][0] as number)
-    : 0;
+  let version =
+    result.length > 0 && result[0].values.length > 0 ? (result[0].values[0][0] as number) : 0;
 
   if (version === 0) {
     const schema = fs.readFileSync(SCHEMA_PATH, 'utf-8');
     db.exec(schema);
-    db.run('PRAGMA user_version = 2');
-    console.log('[db] Schema v2 created');
+    // schema.sql already contains the latest schema (v9) and sets user_version
+    // but we explicitly set it here as a safeguard
+    db.run('PRAGMA user_version = 9');
+    version = 9;
+    console.log('[db] Schema v9 created');
   } else if (version === 1) {
     // v1 → v2: add sender_name column to messages
     db.run('ALTER TABLE messages ADD COLUMN sender_name TEXT');
@@ -166,10 +168,250 @@ function migrate(db: DatabaseWrapper): void {
     db.run('PRAGMA user_version = 4');
     console.log('[db] Migrated schema to v4 (assign mode, depth, decomposing/verifying)');
   }
+
+  if (version <= 4) {
+    // v4 → v5: add teams table, team_members table, team_id columns
+    console.log('[db] Migrating v4 → v5 (teams)...');
+
+    // Create teams table
+    db.exec(`
+      CREATE TABLE IF NOT EXISTS teams (
+        id TEXT PRIMARY KEY,
+        name TEXT NOT NULL,
+        owner_user_id TEXT NOT NULL,
+        created_at INTEGER DEFAULT (unixepoch())
+      );
+    `);
+
+    // Create team_members table
+    db.exec(`
+      CREATE TABLE IF NOT EXISTS team_members (
+        team_id TEXT REFERENCES teams(id) ON DELETE CASCADE,
+        user_id TEXT NOT NULL,
+        role TEXT DEFAULT 'member' CHECK(role IN ('owner','admin','member')),
+        joined_at INTEGER DEFAULT (unixepoch()),
+        PRIMARY KEY (team_id, user_id)
+      );
+    `);
+
+    // Add team_id column to machines (SQLite doesn't support REFERENCES in ADD COLUMN)
+    db.exec(`ALTER TABLE machines ADD COLUMN team_id TEXT;`);
+
+    // Add team_id column to agents
+    db.exec(`ALTER TABLE agents ADD COLUMN team_id TEXT;`);
+
+    // Create default team for existing data
+    const defaultTeamId = 'team-default';
+    const defaultUserId = 'user-default';
+    db.run(
+      `INSERT OR IGNORE INTO teams (id, name, owner_user_id) VALUES (?, 'Default Team', ?)`,
+      [defaultTeamId, defaultUserId]
+    );
+    db.run(
+      `INSERT OR IGNORE INTO team_members (team_id, user_id, role) VALUES (?, ?, 'owner')`,
+      [defaultTeamId, defaultUserId]
+    );
+
+    // Associate existing machines with default team
+    db.run(`UPDATE machines SET team_id = ? WHERE team_id IS NULL`, [defaultTeamId]);
+
+    // Associate existing agents with default team
+    db.run(`UPDATE agents SET team_id = ? WHERE team_id IS NULL`, [defaultTeamId]);
+
+    // Create indexes
+    db.exec(`
+      CREATE INDEX IF NOT EXISTS idx_team_members ON team_members(user_id);
+      CREATE INDEX IF NOT EXISTS idx_machines_team ON machines(team_id);
+      CREATE INDEX IF NOT EXISTS idx_agents_team ON agents(team_id);
+    `);
+
+    db.run('PRAGMA user_version = 5');
+    console.log('[db] Migrated schema to v5 (teams)');
+  }
+
+  if (version <= 5) {
+    // v5 → v6: add groups and group_members tables
+    console.log('[db] Migrating v5 → v6 (groups)...');
+
+    // Create groups table
+    db.exec(`
+      CREATE TABLE IF NOT EXISTS groups (
+        id TEXT PRIMARY KEY,
+        name TEXT NOT NULL,
+        description TEXT,
+        contract_yaml TEXT,
+        owner_team_id TEXT REFERENCES teams(id),
+        invite_code TEXT UNIQUE,
+        invite_code_expires_at INTEGER,
+        invite_code_max_uses INTEGER,
+        invite_code_uses INTEGER DEFAULT 0,
+        created_at INTEGER DEFAULT (unixepoch())
+      );
+    `);
+
+    // Create group_members table
+    db.exec(`
+      CREATE TABLE IF NOT EXISTS group_members (
+        group_id TEXT REFERENCES groups(id) ON DELETE CASCADE,
+        team_id TEXT REFERENCES teams(id) ON DELETE CASCADE,
+        role TEXT DEFAULT 'member' CHECK(role IN ('owner','admin','member')),
+        joined_at INTEGER DEFAULT (unixepoch()),
+        PRIMARY KEY (group_id, team_id)
+      );
+    `);
+
+    // Create indexes
+    db.exec(`
+      CREATE INDEX IF NOT EXISTS idx_group_members_group ON group_members(group_id);
+      CREATE INDEX IF NOT EXISTS idx_group_members_team ON group_members(team_id);
+      CREATE INDEX IF NOT EXISTS idx_groups_invite_code ON groups(invite_code);
+    `);
+
+    db.run('PRAGMA user_version = 6');
+    console.log('[db] Migrated schema to v6 (groups)');
+  }
+
+  if (version <= 6) {
+    // v6 → v7: add group_tasks, authorization_requests tables, extend tasks table
+    console.log('[db] Migrating v6 → v7 (group tasks)...');
+
+    // Add columns to tasks table (SQLite doesn't support REFERENCES in ADD COLUMN)
+    db.exec(`ALTER TABLE tasks ADD COLUMN is_group_task INTEGER DEFAULT 0;`);
+    db.exec(`ALTER TABLE tasks ADD COLUMN source_team_id TEXT;`);
+
+    // Create group_tasks table
+    db.exec(`
+      CREATE TABLE IF NOT EXISTS group_tasks (
+        task_id TEXT PRIMARY KEY REFERENCES tasks(id) ON DELETE CASCADE,
+        group_id TEXT REFERENCES groups(id) ON DELETE CASCADE,
+        source_team_id TEXT REFERENCES teams(id),
+        authorization_status TEXT DEFAULT 'none' CHECK(authorization_status IN ('none','pending','approved','rejected','expired')),
+        authorized_at INTEGER,
+        created_at INTEGER DEFAULT (unixepoch())
+      );
+    `);
+
+    // Create authorization_requests table
+    db.exec(`
+      CREATE TABLE IF NOT EXISTS authorization_requests (
+        id TEXT PRIMARY KEY,
+        group_task_id TEXT REFERENCES group_tasks(task_id) ON DELETE CASCADE,
+        requesting_team_id TEXT REFERENCES teams(id),
+        requesting_agent_id TEXT REFERENCES agents(id),
+        status TEXT DEFAULT 'pending' CHECK(status IN ('pending','approved','rejected','expired')),
+        created_at INTEGER DEFAULT (unixepoch()),
+        expires_at INTEGER,
+        resolved_at INTEGER
+      );
+    `);
+
+    // Create indexes
+    db.exec(`
+      CREATE INDEX IF NOT EXISTS idx_group_tasks_group ON group_tasks(group_id);
+      CREATE INDEX IF NOT EXISTS idx_authorization_requests_status ON authorization_requests(status);
+      CREATE INDEX IF NOT EXISTS idx_tasks_group_task ON tasks(is_group_task);
+    `);
+
+    db.run('PRAGMA user_version = 7');
+    console.log('[db] Migrated schema to v7 (group tasks)');
+  }
+
+  if (version <= 7) {
+    // v7 → v8: add reputation_records table
+    console.log('[db] Migrating v7 → v8 (reputation records)...');
+
+    db.exec(`
+      CREATE TABLE IF NOT EXISTS reputation_records (
+        id TEXT PRIMARY KEY,
+        team_id TEXT REFERENCES teams(id),
+        group_id TEXT REFERENCES groups(id),
+        event_type TEXT NOT NULL CHECK(event_type IN ('task_completed','task_failed','review_approved','review_rejected')),
+        score_delta INTEGER NOT NULL,
+        task_id TEXT,
+        created_at INTEGER DEFAULT (unixepoch())
+      );
+    `);
+
+    db.exec(`
+      CREATE INDEX IF NOT EXISTS idx_reputation_team_group ON reputation_records(team_id, group_id);
+      CREATE INDEX IF NOT EXISTS idx_reputation_group ON reputation_records(group_id);
+    `);
+
+    db.run('PRAGMA user_version = 8');
+    console.log('[db] Migrated schema to v8 (reputation records)');
+  }
+
+  if (version <= 8) {
+    // v8 → v9: add federation tables and agent labels
+    console.log('[db] Migrating v8 → v9 (federation gateway)...');
+
+    // Add labels column to agents
+    db.exec(`ALTER TABLE agents ADD COLUMN labels TEXT DEFAULT '[]';`);
+
+    // Create federation_peers table
+    db.exec(`
+      CREATE TABLE IF NOT EXISTS federation_peers (
+        id TEXT PRIMARY KEY,
+        group_id TEXT REFERENCES groups(id) ON DELETE CASCADE,
+        team_id TEXT REFERENCES teams(id) ON DELETE CASCADE,
+        hub_url TEXT NOT NULL,
+        status TEXT DEFAULT 'connected' CHECK(status IN ('connected','disconnected','error')),
+        labels TEXT,
+        role_card TEXT,
+        last_heartbeat INTEGER,
+        connected_at INTEGER DEFAULT (unixepoch()),
+        disconnected_at INTEGER,
+        UNIQUE(group_id, team_id)
+      );
+    `);
+
+    // Create federation_task_index table
+    db.exec(`
+      CREATE TABLE IF NOT EXISTS federation_task_index (
+        id TEXT PRIMARY KEY,
+        task_id TEXT REFERENCES tasks(id) ON DELETE CASCADE,
+        group_id TEXT REFERENCES groups(id) ON DELETE CASCADE,
+        source_team_id TEXT REFERENCES teams(id),
+        required_labels TEXT,
+        status TEXT DEFAULT 'open' CHECK(status IN ('open','claimed','completed','expired')),
+        claimed_by_team_id TEXT REFERENCES teams(id),
+        claimed_at INTEGER,
+        created_at INTEGER DEFAULT (unixepoch())
+      );
+    `);
+
+    // Create indexes
+    db.exec(`
+      CREATE INDEX IF NOT EXISTS idx_federation_peers_group ON federation_peers(group_id);
+      CREATE INDEX IF NOT EXISTS idx_federation_peers_team ON federation_peers(team_id);
+      CREATE INDEX IF NOT EXISTS idx_federation_task_index_group ON federation_task_index(group_id, status);
+      CREATE INDEX IF NOT EXISTS idx_federation_task_index_labels ON federation_task_index(required_labels);
+    `);
+
+    db.run('PRAGMA user_version = 9');
+    version = 9;
+    console.log('[db] Migrated schema to v9 (federation gateway)');
+  }
 }
 
 /** Get the singleton database instance (must call createDatabase first). */
 export function getDatabase(): DatabaseWrapper {
   if (!dbInstance) throw new Error('Database not initialized. Call createDatabase() first.');
   return dbInstance;
+}
+
+/** Replace the singleton database instance (for tests only). */
+export function setDatabase(db: DatabaseWrapper): void {
+  if (dbInstance) {
+    dbInstance.close();
+  }
+  dbInstance = db;
+}
+
+/** Reset and close the singleton database instance (for tests only). */
+export function resetDatabase(): void {
+  if (dbInstance) {
+    dbInstance.close();
+    dbInstance = null;
+  }
 }

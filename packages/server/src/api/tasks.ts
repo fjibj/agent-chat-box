@@ -1,5 +1,16 @@
 import type { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
-import { createTask, getTask, updateTask, claimTask, assignTask, getTasksByChannel, getTasksByAgent, getTaskTree, checkParentCompletion } from '../modules/task-queue.js';
+import yaml from 'js-yaml';
+import {
+  createTask,
+  getTask,
+  updateTask,
+  claimTask,
+  assignTask,
+  getTasksByChannel,
+  getTasksByAgent,
+  getTaskTree,
+  checkParentCompletion,
+} from '../modules/task-queue.js';
 import { getDatabase } from '../db/index.js';
 import type { Task } from '@agent-chat-box/shared';
 
@@ -40,7 +51,7 @@ export async function registerTaskRoutes(app: FastifyInstance): Promise<void> {
         timeoutSeconds: body.timeoutSeconds,
         maxRetries: body.maxRetries,
       },
-      body.creatorId
+      body.creatorId,
     );
 
     return reply.status(201).send(task);
@@ -50,7 +61,8 @@ export async function registerTaskRoutes(app: FastifyInstance): Promise<void> {
   app.get('/api/tasks', async (request: FastifyRequest) => {
     const query = request.query as { status?: string };
     const db = getDatabase();
-    let sql = 'SELECT id, channel_id, title, description, priority, mode, status, assignee_id, creator_id, tags, required_capabilities, timeout_seconds, max_retries, output, parent_task_id, depth, created_at, claimed_at, completed_at FROM tasks';
+    let sql =
+      'SELECT id, channel_id, title, description, priority, mode, status, assignee_id, creator_id, tags, required_capabilities, timeout_seconds, max_retries, output, parent_task_id, depth, created_at, claimed_at, completed_at FROM tasks';
     const params: unknown[] = [];
 
     if (query.status) {
@@ -79,7 +91,9 @@ export async function registerTaskRoutes(app: FastifyInstance): Promise<void> {
         assigneeId: row.assignee_id as string | undefined,
         creatorId: row.creator_id as string,
         tags: row.tags ? JSON.parse(row.tags as string) : [],
-        requiredCapabilities: row.required_capabilities ? JSON.parse(row.required_capabilities as string) : [],
+        requiredCapabilities: row.required_capabilities
+          ? JSON.parse(row.required_capabilities as string)
+          : [],
         timeoutSeconds: (row.timeout_seconds as number) || 300,
         maxRetries: (row.max_retries as number) || 0,
         retryCount: 0,
@@ -103,6 +117,39 @@ export async function registerTaskRoutes(app: FastifyInstance): Promise<void> {
     if (!task) {
       return reply.status(404).send({ error: 'Task not found' });
     }
+
+    // Process privacy: check visibility for group tasks
+    const db = getDatabase();
+    const gtStmt = db.prepare(`
+      SELECT gt.group_id, g.contract_yaml
+      FROM group_tasks gt
+      JOIN groups g ON gt.group_id = g.id
+      WHERE gt.task_id = ?
+    `);
+    gtStmt.bind([id]);
+    if (gtStmt.step()) {
+      const gtRow = gtStmt.getAsObject() as { group_id: string; contract_yaml: string };
+      gtStmt.free();
+
+      try {
+        const contract = yaml.load(gtRow.contract_yaml || '') as Record<string, unknown>;
+        const visibility = contract.visibility as Record<string, unknown> | undefined;
+
+        // If internal_log is false, strip execution details
+        if (visibility && visibility.internal_log === false) {
+          // Only return final output, not internal execution log
+          return {
+            ...task,
+            execution_log: undefined, // Hide internal log
+          };
+        }
+      } catch {
+        // Return task as-is if contract parsing fails
+      }
+    } else {
+      gtStmt.free();
+    }
+
     return task;
   });
 
@@ -135,7 +182,8 @@ export async function registerTaskRoutes(app: FastifyInstance): Promise<void> {
 
     const result = claimTask(id, body.agentId);
     if (!result.success) {
-      const status = result.error === 'NOT_FOUND' ? 404 : result.error === 'ALREADY_CLAIMED' ? 409 : 400;
+      const status =
+        result.error === 'NOT_FOUND' ? 404 : result.error === 'ALREADY_CLAIMED' ? 409 : 400;
       return reply.status(status).send(result);
     }
 
@@ -153,7 +201,8 @@ export async function registerTaskRoutes(app: FastifyInstance): Promise<void> {
 
     const result = assignTask(id, body.agentId);
     if (!result.success) {
-      const status = result.error === 'NOT_FOUND' ? 404 : result.error === 'ALREADY_CLAIMED' ? 409 : 400;
+      const status =
+        result.error === 'NOT_FOUND' ? 404 : result.error === 'ALREADY_CLAIMED' ? 409 : 400;
       return reply.status(status).send(result);
     }
 
@@ -213,7 +262,7 @@ export async function registerTaskRoutes(app: FastifyInstance): Promise<void> {
 
     // Related messages in the channel
     const stmt = db.prepare(
-      'SELECT id, channel_id, sender_id, sender_kind, content, mentions, reply_to, attachments, created_at FROM messages WHERE channel_id = ? ORDER BY created_at ASC'
+      'SELECT id, channel_id, sender_id, sender_kind, content, mentions, reply_to, attachments, created_at FROM messages WHERE channel_id = ? ORDER BY created_at ASC',
     );
     stmt.bind([task.channelId]);
 
@@ -249,19 +298,25 @@ export async function registerTaskRoutes(app: FastifyInstance): Promise<void> {
   });
 
   // POST /api/tasks/:id/force-complete — force complete a task
-  app.post('/api/tasks/:id/force-complete', async (request: FastifyRequest, reply: FastifyReply) => {
-    const { id } = request.params as { id: string };
-    const task = getTask(id);
-    if (!task) {
-      return reply.status(404).send({ error: 'Task not found' });
-    }
-    if (task.status === 'completed') {
-      return reply.status(409).send({ error: 'Already completed' });
-    }
+  app.post(
+    '/api/tasks/:id/force-complete',
+    async (request: FastifyRequest, reply: FastifyReply) => {
+      const { id } = request.params as { id: string };
+      const task = getTask(id);
+      if (!task) {
+        return reply.status(404).send({ error: 'Task not found' });
+      }
+      if (task.status === 'completed') {
+        return reply.status(409).send({ error: 'Already completed' });
+      }
 
-    const updated = updateTask(id, { status: 'completed', output: task.output || 'Force completed by admin' });
-    return updated;
-  });
+      const updated = updateTask(id, {
+        status: 'completed',
+        output: task.output || 'Force completed by admin',
+      });
+      return updated;
+    },
+  );
 
   // POST /api/tasks/:id/force-fail — force fail a task (triggers retry if available)
   app.post('/api/tasks/:id/force-fail', async (request: FastifyRequest, reply: FastifyReply) => {
@@ -282,7 +337,12 @@ export async function registerTaskRoutes(app: FastifyInstance): Promise<void> {
   app.post('/api/tasks/:id/subtasks', async (request: FastifyRequest, reply: FastifyReply) => {
     const { id } = request.params as { id: string };
     const body = request.body as {
-      subtasks?: Array<{ title: string; description?: string; mode?: 'compete' | 'assign'; assigneeId?: string }>;
+      subtasks?: Array<{
+        title: string;
+        description?: string;
+        mode?: 'compete' | 'assign';
+        assigneeId?: string;
+      }>;
       creatorId?: string;
       maxRetries?: number;
     };
@@ -301,7 +361,7 @@ export async function registerTaskRoutes(app: FastifyInstance): Promise<void> {
 
     // Import createSubtasks
     const { createSubtasks } = await import('../modules/task-queue.js');
-    const subtaskInputs = body.subtasks.map(st => ({
+    const subtaskInputs = body.subtasks.map((st) => ({
       channelId: parentTask.channelId,
       title: st.title,
       description: st.description,

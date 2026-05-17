@@ -13,6 +13,7 @@ export async function registerAgentRoutes(app: FastifyInstance): Promise<void> {
       runtime?: string;
       description?: string;
       capabilities?: string[];
+      labels?: string[];
     };
 
     if (!body.machineId || !body.name || !body.runtime) {
@@ -21,7 +22,9 @@ export async function registerAgentRoutes(app: FastifyInstance): Promise<void> {
 
     const validRuntimes = ['claude', 'codex', 'openclaw', 'hermes'];
     if (!validRuntimes.includes(body.runtime)) {
-      return reply.status(400).send({ error: `runtime must be one of: ${validRuntimes.join(', ')}` });
+      return reply
+        .status(400)
+        .send({ error: `runtime must be one of: ${validRuntimes.join(', ')}` });
     }
 
     const db = getDatabase();
@@ -39,16 +42,26 @@ export async function registerAgentRoutes(app: FastifyInstance): Promise<void> {
     const name = body.name.trim();
     const description = body.description?.trim() || '';
     const capabilities = body.capabilities || [];
+    const labels = body.labels || [];
     const roleCard: RoleCard = { name, description };
 
     db.run(
-      `INSERT INTO agents (id, machine_id, name, runtime, capabilities, role_card, status)
-       VALUES (?, ?, ?, ?, ?, ?, ?)`,
-      [id, body.machineId, name, body.runtime, JSON.stringify(capabilities), JSON.stringify(roleCard), 'sleeping']
+      `INSERT INTO agents (id, machine_id, name, runtime, capabilities, role_card, labels, status)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+      [
+        id,
+        body.machineId,
+        name,
+        body.runtime,
+        JSON.stringify(capabilities),
+        JSON.stringify(roleCard),
+        JSON.stringify(labels),
+        'sleeping',
+      ],
     );
     db.save();
 
-    return reply.status(201).send({ id, name, runtime: body.runtime, capabilities });
+    return reply.status(201).send({ id, name, runtime: body.runtime, capabilities, labels });
   });
 
   // GET /api/agents — list agents
@@ -56,7 +69,8 @@ export async function registerAgentRoutes(app: FastifyInstance): Promise<void> {
     const query = request.query as { machineId?: string };
     const db = getDatabase();
 
-    let sql = 'SELECT id, machine_id, name, runtime, status, capabilities, role_card, current_task_id, last_sleep_at, last_wake_at, created_at FROM agents';
+    let sql =
+      'SELECT id, machine_id, team_id, name, runtime, status, capabilities, role_card, labels, current_task_id, last_sleep_at, last_wake_at, created_at FROM agents';
     const params: unknown[] = [];
 
     if (query.machineId) {
@@ -74,11 +88,13 @@ export async function registerAgentRoutes(app: FastifyInstance): Promise<void> {
       agents.push({
         id: row.id as string,
         machineId: row.machine_id as string,
+        teamId: row.team_id as string | null,
         name: row.name as string,
         runtime: row.runtime as Agent['runtime'],
         status: row.status as Agent['status'],
         roleCard: JSON.parse(row.role_card as string),
-        capabilities: JSON.parse(row.capabilities as string || '[]'),
+        capabilities: JSON.parse((row.capabilities as string) || '[]'),
+        labels: JSON.parse((row.labels as string) || '[]'),
         currentTaskId: row.current_task_id as string | undefined,
         lastSleepAt: row.last_sleep_at as number | undefined,
         lastWakeAt: row.last_wake_at as number | undefined,
@@ -95,7 +111,7 @@ export async function registerAgentRoutes(app: FastifyInstance): Promise<void> {
     const db = getDatabase();
 
     const stmt = db.prepare(
-      'SELECT id, machine_id, name, runtime, status, capabilities, role_card, current_task_id, last_sleep_at, last_wake_at, created_at FROM agents WHERE id = ?'
+      'SELECT id, machine_id, team_id, name, runtime, status, capabilities, role_card, labels, current_task_id, last_sleep_at, last_wake_at, created_at FROM agents WHERE id = ?',
     );
     stmt.bind([id]);
 
@@ -110,11 +126,13 @@ export async function registerAgentRoutes(app: FastifyInstance): Promise<void> {
     return {
       id: row.id,
       machineId: row.machine_id,
+      teamId: row.team_id,
       name: row.name,
       runtime: row.runtime,
       status: row.status,
       roleCard: JSON.parse(row.role_card as string),
-      capabilities: JSON.parse(row.capabilities as string || '[]'),
+      capabilities: JSON.parse((row.capabilities as string) || '[]'),
+      labels: JSON.parse((row.labels as string) || '[]'),
       currentTaskId: row.current_task_id,
       lastSleepAt: row.last_sleep_at,
       lastWakeAt: row.last_wake_at,
@@ -125,7 +143,7 @@ export async function registerAgentRoutes(app: FastifyInstance): Promise<void> {
   // PATCH /api/agents/:id — update agent
   app.patch('/api/agents/:id', async (request: FastifyRequest, reply: FastifyReply) => {
     const { id } = request.params as { id: string };
-    const body = request.body as { name?: string; description?: string; capabilities?: string[] };
+    const body = request.body as { name?: string; description?: string; capabilities?: string[]; labels?: string[] };
 
     const db = getDatabase();
 
@@ -156,6 +174,10 @@ export async function registerAgentRoutes(app: FastifyInstance): Promise<void> {
     if (body.capabilities) {
       updates.push('capabilities = ?');
       params.push(JSON.stringify(body.capabilities));
+    }
+    if (body.labels) {
+      updates.push('labels = ?');
+      params.push(JSON.stringify(body.labels));
     }
 
     if (updates.length === 0) {
@@ -199,20 +221,42 @@ export function registerAgentWs(
     runtime: string;
     roleCard: RoleCard;
     capabilities: string[];
-  }
+    labels?: string[];
+  },
 ): Agent | null {
   const db = getDatabase();
 
+  // Get machine's team_id for auto-assignment
+  const machineStmt = db.prepare('SELECT team_id FROM machines WHERE id = ?');
+  machineStmt.bind([machineId]);
+  let machineTeamId: string | null = null;
+  if (machineStmt.step()) {
+    const machineRow = machineStmt.getAsObject() as { team_id: string | null };
+    machineTeamId = machineRow.team_id;
+  }
+  machineStmt.free();
+
   // Check if agent already exists for this machine (by name or same runtime)
-  const existingStmt = db.prepare('SELECT id FROM agents WHERE machine_id = ? AND (name = ? OR runtime = ?)');
+  const existingStmt = db.prepare(
+    'SELECT id FROM agents WHERE machine_id = ? AND (name = ? OR runtime = ?)',
+  );
   existingStmt.bind([machineId, agentData.name, agentData.runtime]);
   if (existingStmt.step()) {
     const row = existingStmt.getAsObject() as { id: string };
     existingStmt.free();
     // Update existing agent
     db.run(
-      'UPDATE agents SET name = ?, runtime = ?, role_card = ?, capabilities = ?, status = ?, last_wake_at = ? WHERE id = ?',
-      [agentData.name, agentData.runtime, JSON.stringify(agentData.roleCard), JSON.stringify(agentData.capabilities), 'awake', Date.now(), row.id]
+      'UPDATE agents SET name = ?, runtime = ?, role_card = ?, capabilities = ?, labels = ?, status = ?, last_wake_at = ? WHERE id = ?',
+      [
+        agentData.name,
+        agentData.runtime,
+        JSON.stringify(agentData.roleCard),
+        JSON.stringify(agentData.capabilities),
+        JSON.stringify(agentData.labels || []),
+        'awake',
+        Date.now(),
+        row.id,
+      ],
     );
     db.save();
     return getAgentById(row.id);
@@ -222,19 +266,32 @@ export function registerAgentWs(
   // Create new agent
   const id = agentData.agentId || crypto.randomUUID();
   db.run(
-    `INSERT INTO agents (id, machine_id, name, runtime, capabilities, role_card, status, last_wake_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-    [id, machineId, agentData.name, agentData.runtime, JSON.stringify(agentData.capabilities), JSON.stringify(agentData.roleCard), 'awake', Date.now()]
+    `INSERT INTO agents (id, machine_id, team_id, name, runtime, capabilities, role_card, labels, status, last_wake_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    [
+      id,
+      machineId,
+      machineTeamId, // Auto-assign to machine's team
+      agentData.name,
+      agentData.runtime,
+      JSON.stringify(agentData.capabilities),
+      JSON.stringify(agentData.roleCard),
+      JSON.stringify(agentData.labels || []),
+      'awake',
+      Date.now(),
+    ],
   );
   db.save();
 
   // Auto-join default channel
-  const channelStmt = db.prepare("SELECT id FROM channels WHERE name = 'general' AND type = 'group'");
+  const channelStmt = db.prepare(
+    "SELECT id FROM channels WHERE name = 'general' AND type = 'group'",
+  );
   if (channelStmt.step()) {
     const channel = channelStmt.getAsObject() as { id: string };
     db.run(
       'INSERT OR IGNORE INTO channel_members (channel_id, member_id, member_kind) VALUES (?, ?, ?)',
-      [channel.id, id, 'agent']
+      [channel.id, id, 'agent'],
     );
     db.save();
   }
@@ -247,7 +304,7 @@ export function registerAgentWs(
 export function getAgentById(id: string): Agent | null {
   const db = getDatabase();
   const stmt = db.prepare(
-    'SELECT id, machine_id, name, runtime, status, capabilities, role_card, current_task_id, last_sleep_at, last_wake_at FROM agents WHERE id = ?'
+    'SELECT id, machine_id, team_id, name, runtime, status, capabilities, role_card, labels, current_task_id, last_sleep_at, last_wake_at FROM agents WHERE id = ?',
   );
   stmt.bind([id]);
 
@@ -262,11 +319,13 @@ export function getAgentById(id: string): Agent | null {
   return {
     id: row.id as string,
     machineId: row.machine_id as string,
+    teamId: row.team_id as string | null,
     name: row.name as string,
     runtime: row.runtime as Agent['runtime'],
     status: row.status as Agent['status'],
     roleCard: JSON.parse(row.role_card as string),
-    capabilities: JSON.parse(row.capabilities as string || '[]'),
+    capabilities: JSON.parse((row.capabilities as string) || '[]'),
+    labels: JSON.parse((row.labels as string) || '[]'),
     currentTaskId: row.current_task_id as string | undefined,
     lastSleepAt: row.last_sleep_at as number | undefined,
     lastWakeAt: row.last_wake_at as number | undefined,
@@ -280,7 +339,10 @@ export function registerNameResolution(app: FastifyInstance): void {
     const { ids } = request.query as { ids?: string };
     if (!ids) return { names: {} };
 
-    const idList = ids.split(',').map(s => s.trim()).filter(Boolean);
+    const idList = ids
+      .split(',')
+      .map((s) => s.trim())
+      .filter(Boolean);
     const names: Record<string, string> = {};
 
     // 1. Look up agents from DB
@@ -323,7 +385,7 @@ export function getAgentsByMachineId(machineId: string): Agent[] {
   const db = getDatabase();
   const agents: Agent[] = [];
   const stmt = db.prepare(
-    'SELECT id, machine_id, name, runtime, status, capabilities, role_card, current_task_id, last_sleep_at, last_wake_at FROM agents WHERE machine_id = ?'
+    'SELECT id, machine_id, team_id, name, runtime, status, capabilities, role_card, labels, current_task_id, last_sleep_at, last_wake_at FROM agents WHERE machine_id = ?',
   );
   stmt.bind([machineId]);
 
@@ -332,11 +394,13 @@ export function getAgentsByMachineId(machineId: string): Agent[] {
     agents.push({
       id: row.id as string,
       machineId: row.machine_id as string,
+      teamId: row.team_id as string | null,
       name: row.name as string,
       runtime: row.runtime as Agent['runtime'],
       status: row.status as Agent['status'],
       roleCard: JSON.parse(row.role_card as string),
-      capabilities: JSON.parse(row.capabilities as string || '[]'),
+      capabilities: JSON.parse((row.capabilities as string) || '[]'),
+      labels: JSON.parse((row.labels as string) || '[]'),
       currentTaskId: row.current_task_id as string | undefined,
       lastSleepAt: row.last_sleep_at as number | undefined,
       lastWakeAt: row.last_wake_at as number | undefined,

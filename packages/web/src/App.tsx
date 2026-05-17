@@ -9,6 +9,8 @@ import { MemberList } from './components/MemberList';
 import { TaskBoard } from './components/TaskBoard';
 import { AgentsPage } from './pages/AgentsPage';
 import { SettingsPage } from './pages/SettingsPage';
+import { GroupsPage } from './pages/GroupsPage';
+import { AuthorizationsPage } from './pages/AuthorizationsPage';
 import { requestNotificationPermission, setNavigationCallback, notifyTaskComplete, notifyMention } from './utils/notifications';
 
 // Name prompt modal
@@ -179,6 +181,8 @@ export default function App() {
             <nav className="flex space-x-2">
               <NavLink to="/">Chat</NavLink>
               <NavLink to="/tasks">Tasks</NavLink>
+              <NavLink to="/groups">Groups</NavLink>
+              <NavLink to="/authorizations">Authorizations</NavLink>
               <NavLink to="/agents">Agents</NavLink>
               <NavLink to="/settings">Settings</NavLink>
             </nav>
@@ -190,6 +194,8 @@ export default function App() {
           <Routes>
             <Route path="/" element={<ChatPage wsMessages={messages} send={send} clientId={clientId} />} />
             <Route path="/tasks" element={<TasksPage />} />
+            <Route path="/groups" element={<GroupsPage />} />
+            <Route path="/authorizations" element={<AuthorizationsPage />} />
             <Route path="/agents" element={<AgentsPage />} />
             <Route path="/settings" element={<SettingsPage />} />
           </Routes>

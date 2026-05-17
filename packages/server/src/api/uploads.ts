@@ -60,7 +60,7 @@ export async function registerUploadRoutes(app: FastifyInstance): Promise<void> 
 
     // Find file (could have any extension)
     const files = fs.readdirSync(UPLOAD_DIR);
-    const file = files.find(f => f.startsWith(id));
+    const file = files.find((f) => f.startsWith(id));
 
     if (!file) {
       return reply.status(404).send({ error: 'File not found' });
@@ -89,9 +89,6 @@ export async function registerUploadRoutes(app: FastifyInstance): Promise<void> 
 
     const mime = mimeTypes[ext] || 'application/octet-stream';
 
-    return reply
-      .type(mime)
-      .header('Content-Length', stat.size)
-      .send(fs.createReadStream(filePath));
+    return reply.type(mime).header('Content-Length', stat.size).send(fs.createReadStream(filePath));
   });
 }

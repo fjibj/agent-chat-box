@@ -73,4 +73,22 @@ export const MSG = {
   // Human identity
   HUMAN_IDENTIFY: 'human.identify',
   HUMAN_IDENTIFIED: 'human.identified',
+
+  // Group
+  GROUP_CREATED: 'group.created',
+  GROUP_JOINED: 'group.joined',
+  GROUP_LEFT: 'group.left',
+  GROUP_TASK_CREATED: 'group.task.created',
+  GROUP_TASK_CLAIMED: 'group.task.claimed',
+  GROUP_CONTRACT_UPDATED: 'group.contract.updated',
+
+  // Authorization
+  AUTHORIZATION_REQUESTED: 'authorization.requested',
+  AUTHORIZATION_APPROVED: 'authorization.approved',
+  AUTHORIZATION_REJECTED: 'authorization.rejected',
+  AUTHORIZATION_EXPIRED: 'authorization.expired',
+
+  // Review
+  REVIEW_REQUESTED: 'review.requested',
+  REVIEW_COMPLETED: 'review.completed',
 } as const;

@@ -19,7 +19,15 @@ import { registerAgentRoutes, registerNameResolution } from './api/agents.js';
 import { registerMessageRoutes } from './api/messages.js';
 import { registerUploadRoutes } from './api/uploads.js';
 import { registerTaskRoutes } from './api/tasks.js';
+import { registerTeamRoutes } from './api/teams.js';
+import { registerGroupRoutes } from './api/groups.js';
+import { registerGroupTaskRoutes } from './api/group-tasks.js';
+import { registerAuthorizationRoutes, checkExpiredAuthorizations } from './api/authorizations.js';
+import { registerReviewRoutes } from './api/reviews.js';
+import { registerReputationRoutes } from './api/reputation.js';
 import { startTimeoutChecker, stopTimeoutChecker } from './modules/task-queue.js';
+import { handleFederationConnection, registerFederationHubRoutes, startHubHeartbeat } from './federation/hub.js';
+import { initFederationRunner } from './federation/runner.js';
 
 const PORT = parseInt(process.env.PORT || '3000', 10);
 const HOST = process.env.HOST || '0.0.0.0';
@@ -114,6 +122,62 @@ async function main() {
     console.error('[server] Failed to register task routes:', err);
   }
 
+  // Team routes
+  try {
+    await registerTeamRoutes(app);
+    console.log('[server] Team routes registered');
+  } catch (err) {
+    console.error('[server] Failed to register team routes:', err);
+  }
+
+  // Group routes
+  try {
+    await registerGroupRoutes(app);
+    console.log('[server] Group routes registered');
+  } catch (err) {
+    console.error('[server] Failed to register group routes:', err);
+  }
+
+  // Group task routes
+  try {
+    await registerGroupTaskRoutes(app);
+    console.log('[server] Group task routes registered');
+  } catch (err) {
+    console.error('[server] Failed to register group task routes:', err);
+  }
+
+  // Authorization routes
+  try {
+    await registerAuthorizationRoutes(app);
+    console.log('[server] Authorization routes registered');
+  } catch (err) {
+    console.error('[server] Failed to register authorization routes:', err);
+  }
+
+  // Review routes
+  try {
+    await registerReviewRoutes(app);
+    console.log('[server] Review routes registered');
+  } catch (err) {
+    console.error('[server] Failed to register review routes:', err);
+  }
+
+  // Reputation routes
+  try {
+    await registerReputationRoutes(app);
+    console.log('[server] Reputation routes registered');
+  } catch (err) {
+    console.error('[server] Failed to register reputation routes:', err);
+  }
+
+  // Federation Hub routes
+  try {
+    await registerFederationHubRoutes(app);
+    console.log('[server] Federation Hub routes registered');
+  } catch (err) {
+    console.error('[server] Failed to register federation hub routes:', err);
+  }
+
   // Ensure default channel exists
   ensureDefaultChannel();
 
@@ -130,6 +194,25 @@ async function main() {
 
   // Start task timeout checker
   startTimeoutChecker();
+
+  // Start authorization timeout checker (every 30 seconds)
+  const authCheckInterval = setInterval(checkExpiredAuthorizations, 30_000);
+
+  // Start federation hub heartbeat checker
+  startHubHeartbeat();
+
+  // SPA fallback for client-side routing (React Router)
+  app.setNotFoundHandler(async (request, reply) => {
+    const url = request.url || '/';
+    if (url.startsWith('/api') || url.startsWith('/ws') || url.startsWith('/daemon') || url === '/daemon.js') {
+      return reply.status(404).send({ error: 'Not Found' });
+    }
+    const indexHtml = path.join(webDist, 'index.html');
+    if (fs.existsSync(indexHtml)) {
+      return reply.type('text/html').send(fs.readFileSync(indexHtml));
+    }
+    return reply.status(404).send({ error: 'Not Found' });
+  });
 
   // 6. Error handler
   app.setErrorHandler((error, _request, reply) => {
@@ -161,17 +244,32 @@ async function main() {
       wssDaemon.handleUpgrade(request, socket, head, (ws) => {
         handleConnection(ws, 'daemon');
       });
+    } else if (url.pathname === '/federation') {
+      wssDaemon.handleUpgrade(request, socket, head, (ws) => {
+        handleFederationConnection(ws);
+      });
     } else {
       socket.destroy();
     }
   });
 
-  console.log('[server] WebSocket endpoints: /ws, /daemon/connect');
+  console.log('[server] WebSocket endpoints: /ws, /daemon/connect, /federation');
+
+  // Initialize federation runner if configured
+  if (process.env.FEDERATION_URL && process.env.FEDERATION_INVITE_CODE) {
+    initFederationRunner({
+      hubUrl: process.env.FEDERATION_URL,
+      inviteCode: process.env.FEDERATION_INVITE_CODE,
+      teamId: process.env.FEDERATION_TEAM_ID || 'unknown',
+    });
+  }
 
   // 9. Graceful shutdown
   const shutdown = async () => {
     console.log('[server] Shutting down...');
     stopTimeoutChecker();
+    clearInterval(authCheckInterval);
+    import('./federation/hub.js').then(({ stopHubHeartbeat }) => stopHubHeartbeat());
     wssHuman.close();
     wssDaemon.close();
     db.save();

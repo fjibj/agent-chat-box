@@ -53,7 +53,7 @@ export function saveMessage(data: {
       data.replyTo || null,
       data.attachments ? JSON.stringify(data.attachments) : null,
       now,
-    ]
+    ],
   );
   db.save();
 
@@ -76,7 +76,7 @@ export function getRecentMessages(channelId: string, limit: number = 50): Messag
   const db = getDatabase();
   const messages: Message[] = [];
   const stmt = db.prepare(
-    'SELECT id, channel_id, sender_id, sender_kind, sender_name, content, mentions, reply_to, attachments, created_at FROM messages WHERE channel_id = ? ORDER BY created_at DESC LIMIT ?'
+    'SELECT id, channel_id, sender_id, sender_kind, sender_name, content, mentions, reply_to, attachments, created_at FROM messages WHERE channel_id = ? ORDER BY created_at DESC LIMIT ?',
   );
   stmt.bind([channelId, limit]);
 
@@ -110,7 +110,8 @@ export async function registerMessageRoutes(app: FastifyInstance): Promise<void>
     const limit = Math.min(parseInt(query.limit || '50', 10), 200);
     const db = getDatabase();
 
-    let sql = 'SELECT id, channel_id, sender_id, sender_kind, sender_name, content, mentions, reply_to, attachments, created_at FROM messages WHERE channel_id = ?';
+    let sql =
+      'SELECT id, channel_id, sender_id, sender_kind, sender_name, content, mentions, reply_to, attachments, created_at FROM messages WHERE channel_id = ?';
     const params: unknown[] = [id];
 
     if (query.before) {

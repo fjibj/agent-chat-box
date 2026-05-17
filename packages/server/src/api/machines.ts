@@ -55,10 +55,12 @@ export async function registerMachineRoutes(app: FastifyInstance): Promise<void>
     const apiKeyHash = hashApiKey(apiKey);
     const name = body.name.trim();
 
-    db.run(
-      'INSERT INTO machines (id, name, api_key_hash, status) VALUES (?, ?, ?, ?)',
-      [id, name, apiKeyHash, 'offline']
-    );
+    db.run('INSERT INTO machines (id, name, api_key_hash, status) VALUES (?, ?, ?, ?)', [
+      id,
+      name,
+      apiKeyHash,
+      'offline',
+    ]);
     db.save();
 
     // API Key only returned once
@@ -68,10 +70,22 @@ export async function registerMachineRoutes(app: FastifyInstance): Promise<void>
   // GET /api/machines — list machines (no keys)
   app.get('/api/machines', async () => {
     const db = getDatabase();
-    const machines: Array<{ id: string; name: string; status: string; lastHeartbeat: number | null }> = [];
-    const stmt = db.prepare('SELECT id, name, status, last_heartbeat FROM machines ORDER BY created_at DESC');
+    const machines: Array<{
+      id: string;
+      name: string;
+      status: string;
+      lastHeartbeat: number | null;
+    }> = [];
+    const stmt = db.prepare(
+      'SELECT id, name, status, last_heartbeat FROM machines ORDER BY created_at DESC',
+    );
     while (stmt.step()) {
-      const row = stmt.getAsObject() as { id: string; name: string; status: string; last_heartbeat: number | null };
+      const row = stmt.getAsObject() as {
+        id: string;
+        name: string;
+        status: string;
+        last_heartbeat: number | null;
+      };
       machines.push({
         id: row.id,
         name: row.name,
@@ -87,13 +101,21 @@ export async function registerMachineRoutes(app: FastifyInstance): Promise<void>
   app.get('/api/machines/:id', async (request: FastifyRequest, reply: FastifyReply) => {
     const { id } = request.params as { id: string };
     const db = getDatabase();
-    const stmt = db.prepare('SELECT id, name, status, last_heartbeat, created_at FROM machines WHERE id = ?');
+    const stmt = db.prepare(
+      'SELECT id, name, status, last_heartbeat, created_at FROM machines WHERE id = ?',
+    );
     stmt.bind([id]);
     if (!stmt.step()) {
       stmt.free();
       return reply.status(404).send({ error: 'Machine not found' });
     }
-    const row = stmt.getAsObject() as { id: string; name: string; status: string; last_heartbeat: number | null; created_at: number };
+    const row = stmt.getAsObject() as {
+      id: string;
+      name: string;
+      status: string;
+      last_heartbeat: number | null;
+      created_at: number;
+    };
     stmt.free();
     return {
       id: row.id,

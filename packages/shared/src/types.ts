@@ -20,14 +20,32 @@ export interface Machine {
 export interface Agent {
   id: string;
   machineId: string;
+  teamId?: string | null;
   name: string;
   runtime: 'claude' | 'codex' | 'openclaw' | 'hermes';
   status: 'sleeping' | 'awake' | 'running' | 'offline';
   roleCard: RoleCard;
   capabilities: string[];
+  labels?: string[];
   currentTaskId?: string;
   lastSleepAt?: number;
   lastWakeAt?: number;
+}
+
+// Team
+export interface Team {
+  id: string;
+  name: string;
+  ownerUserId: string;
+  createdAt: number;
+}
+
+// Team member
+export interface TeamMember {
+  teamId: string;
+  userId: string;
+  role: 'owner' | 'admin' | 'member';
+  joinedAt: number;
 }
 
 export interface RoleCard {
@@ -112,11 +130,44 @@ export interface AgentHelloPayload {
 
 // Agent wake payload (server → agent)
 export interface AgentWakePayload {
-  reason: 'mention' | 'dm' | 'task_assigned' | 'task_available';
+  reason: 'mention' | 'dm' | 'task_assigned' | 'task_available' | 'federation_claim';
   taskId?: string;
   channelId?: string;
   recentMessages?: Message[];
   context?: string;
+}
+
+// Federation message envelope (slock.ai inspired)
+export type FederationMessageType =
+  | 'federation.register'
+  | 'federation.register.result'
+  | 'federation.heartbeat'
+  | 'federation.member.joined'
+  | 'federation.member.left'
+  | 'federation.task.broadcast'
+  | 'federation.task.claim'
+  | 'federation.agent.wake';
+
+export interface FederationMessage {
+  v: number;
+  id: string;
+  type: FederationMessageType;
+  ts: number;
+  from: string;
+  to?: string;
+  data: unknown;
+}
+
+export interface FederationRoleCard {
+  name: string;
+  teamId: string;
+  groupRoles: Array<{
+    groupId: string;
+    role: 'owner' | 'admin' | 'member';
+    reputationScore: number;
+  }>;
+  labels: string[];
+  capabilities: string[];
 }
 
 // Task create input

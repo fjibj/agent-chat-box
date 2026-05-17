@@ -5,7 +5,12 @@ import { getClients } from '../ws/handler.js';
 import { getAgentById } from './agents.js';
 
 /** Create or get DM channel between two members */
-export function getOrCreateDmChannel(member1Id: string, member1Kind: 'human' | 'agent', member2Id: string, member2Kind: 'human' | 'agent'): { id: string; name: string } {
+export function getOrCreateDmChannel(
+  member1Id: string,
+  member1Kind: 'human' | 'agent',
+  member2Id: string,
+  member2Kind: 'human' | 'agent',
+): { id: string; name: string } {
   const db = getDatabase();
 
   // Check if DM already exists (both members in same dm channel)
@@ -26,29 +31,32 @@ export function getOrCreateDmChannel(member1Id: string, member1Kind: 'human' | '
   // Create new DM channel
   const id = crypto.randomUUID();
   const name = `dm:${member1Id}:${member2Id}`;
-  db.run(
-    'INSERT INTO channels (id, name, type) VALUES (?, ?, ?)',
-    [id, name, 'dm']
-  );
-  db.run(
-    'INSERT INTO channel_members (channel_id, member_id, member_kind) VALUES (?, ?, ?)',
-    [id, member1Id, member1Kind]
-  );
-  db.run(
-    'INSERT INTO channel_members (channel_id, member_id, member_kind) VALUES (?, ?, ?)',
-    [id, member2Id, member2Kind]
-  );
+  db.run('INSERT INTO channels (id, name, type) VALUES (?, ?, ?)', [id, name, 'dm']);
+  db.run('INSERT INTO channel_members (channel_id, member_id, member_kind) VALUES (?, ?, ?)', [
+    id,
+    member1Id,
+    member1Kind,
+  ]);
+  db.run('INSERT INTO channel_members (channel_id, member_id, member_kind) VALUES (?, ?, ?)', [
+    id,
+    member2Id,
+    member2Kind,
+  ]);
   db.save();
 
   return { id, name };
 }
 
 /** Add member to channel */
-export function addChannelMember(channelId: string, memberId: string, memberKind: 'human' | 'agent'): void {
+export function addChannelMember(
+  channelId: string,
+  memberId: string,
+  memberKind: 'human' | 'agent',
+): void {
   const db = getDatabase();
   db.run(
     'INSERT OR IGNORE INTO channel_members (channel_id, member_id, member_kind) VALUES (?, ?, ?)',
-    [channelId, memberId, memberKind]
+    [channelId, memberId, memberKind],
   );
   db.save();
 }
@@ -56,18 +64,22 @@ export function addChannelMember(channelId: string, memberId: string, memberKind
 /** Remove member from channel */
 export function removeChannelMember(channelId: string, memberId: string): void {
   const db = getDatabase();
-  db.run(
-    'DELETE FROM channel_members WHERE channel_id = ? AND member_id = ?',
-    [channelId, memberId]
-  );
+  db.run('DELETE FROM channel_members WHERE channel_id = ? AND member_id = ?', [
+    channelId,
+    memberId,
+  ]);
   db.save();
 }
 
 /** Get channel members */
-export function getChannelMembers(channelId: string): Array<{ memberId: string; memberKind: string; joinedAt: number }> {
+export function getChannelMembers(
+  channelId: string,
+): Array<{ memberId: string; memberKind: string; joinedAt: number }> {
   const db = getDatabase();
   const members: Array<{ memberId: string; memberKind: string; joinedAt: number }> = [];
-  const stmt = db.prepare('SELECT member_id, member_kind, joined_at FROM channel_members WHERE channel_id = ? ORDER BY joined_at ASC');
+  const stmt = db.prepare(
+    'SELECT member_id, member_kind, joined_at FROM channel_members WHERE channel_id = ? ORDER BY joined_at ASC',
+  );
   stmt.bind([channelId]);
   while (stmt.step()) {
     const row = stmt.getAsObject() as { member_id: string; member_kind: string; joined_at: number };
@@ -82,7 +94,9 @@ export function getChannelMembers(channelId: string): Array<{ memberId: string; 
 }
 
 /** Get channels for a member */
-export function getMemberChannels(memberId: string): Array<{ id: string; name: string; type: string }> {
+export function getMemberChannels(
+  memberId: string,
+): Array<{ id: string; name: string; type: string }> {
   const db = getDatabase();
   const channels: Array<{ id: string; name: string; type: string }> = [];
   const stmt = db.prepare(`
@@ -111,10 +125,12 @@ export function ensureDefaultChannel(): void {
   stmt.free();
 
   const id = crypto.randomUUID();
-  db.run(
-    'INSERT INTO channels (id, name, description, type) VALUES (?, ?, ?, ?)',
-    [id, 'general', 'General discussion', 'group']
-  );
+  db.run('INSERT INTO channels (id, name, description, type) VALUES (?, ?, ?, ?)', [
+    id,
+    'general',
+    'General discussion',
+    'group',
+  ]);
   db.save();
   console.log('[db] Default #general channel created');
 }
@@ -139,10 +155,12 @@ export async function registerChannelRoutes(app: FastifyInstance): Promise<void>
     const name = body.name.trim();
     const description = body.description?.trim() || null;
 
-    db.run(
-      'INSERT INTO channels (id, name, description, type) VALUES (?, ?, ?, ?)',
-      [id, name, description, type]
-    );
+    db.run('INSERT INTO channels (id, name, description, type) VALUES (?, ?, ?, ?)', [
+      id,
+      name,
+      description,
+      type,
+    ]);
     db.save();
 
     return reply.status(201).send({ id, name, description, type });
@@ -158,7 +176,9 @@ export async function registerChannelRoutes(app: FastifyInstance): Promise<void>
     };
 
     if (!body.member1Id || !body.member1Kind || !body.member2Id || !body.member2Kind) {
-      return reply.status(400).send({ error: 'member1Id, member1Kind, member2Id, member2Kind are required' });
+      return reply
+        .status(400)
+        .send({ error: 'member1Id, member1Kind, member2Id, member2Kind are required' });
     }
 
     const validKinds = ['human', 'agent'];
@@ -170,7 +190,7 @@ export async function registerChannelRoutes(app: FastifyInstance): Promise<void>
       body.member1Id,
       body.member1Kind as 'human' | 'agent',
       body.member2Id,
-      body.member2Kind as 'human' | 'agent'
+      body.member2Kind as 'human' | 'agent',
     );
 
     return reply.status(201).send(channel);
@@ -198,12 +218,24 @@ export async function registerChannelRoutes(app: FastifyInstance): Promise<void>
 
     sql += ' ORDER BY c.created_at ASC';
 
-    const channels: Array<{ id: string; name: string; description: string | null; type: string; createdAt: number }> = [];
+    const channels: Array<{
+      id: string;
+      name: string;
+      description: string | null;
+      type: string;
+      createdAt: number;
+    }> = [];
     const stmt = db.prepare(sql);
     if (params.length > 0) stmt.bind(params);
 
     while (stmt.step()) {
-      const row = stmt.getAsObject() as { id: string; name: string; description: string | null; type: string; created_at: number };
+      const row = stmt.getAsObject() as {
+        id: string;
+        name: string;
+        description: string | null;
+        type: string;
+        created_at: number;
+      };
       channels.push({
         id: row.id,
         name: row.name,
@@ -220,13 +252,21 @@ export async function registerChannelRoutes(app: FastifyInstance): Promise<void>
   app.get('/api/channels/:id', async (request: FastifyRequest, reply: FastifyReply) => {
     const { id } = request.params as { id: string };
     const db = getDatabase();
-    const stmt = db.prepare('SELECT id, name, description, type, created_at FROM channels WHERE id = ?');
+    const stmt = db.prepare(
+      'SELECT id, name, description, type, created_at FROM channels WHERE id = ?',
+    );
     stmt.bind([id]);
     if (!stmt.step()) {
       stmt.free();
       return reply.status(404).send({ error: 'Channel not found' });
     }
-    const row = stmt.getAsObject() as { id: string; name: string; description: string | null; type: string; created_at: number };
+    const row = stmt.getAsObject() as {
+      id: string;
+      name: string;
+      description: string | null;
+      type: string;
+      created_at: number;
+    };
     stmt.free();
     return {
       id: row.id,
@@ -262,11 +302,12 @@ export async function registerChannelRoutes(app: FastifyInstance): Promise<void>
     }
 
     // Resolve names
-    const resolved = members.map(m => ({
+    const resolved = members.map((m) => ({
       ...m,
-      name: m.memberKind === 'agent'
-        ? getAgentById(m.memberId)?.name || m.memberId
-        : humanNameMap.get(m.memberId) || m.memberId,
+      name:
+        m.memberKind === 'agent'
+          ? getAgentById(m.memberId)?.name || m.memberId
+          : humanNameMap.get(m.memberId) || m.memberId,
     }));
 
     return { members: resolved };
@@ -300,11 +341,14 @@ export async function registerChannelRoutes(app: FastifyInstance): Promise<void>
   });
 
   // DELETE /api/channels/:id/members/:memberId — remove member from channel
-  app.delete('/api/channels/:id/members/:memberId', async (request: FastifyRequest, reply: FastifyReply) => {
-    const { id, memberId } = request.params as { id: string; memberId: string };
-    removeChannelMember(id, memberId);
-    return { success: true };
-  });
+  app.delete(
+    '/api/channels/:id/members/:memberId',
+    async (request: FastifyRequest, reply: FastifyReply) => {
+      const { id, memberId } = request.params as { id: string; memberId: string };
+      removeChannelMember(id, memberId);
+      return { success: true };
+    },
+  );
 
   // DELETE /api/channels/:id — delete channel
   app.delete('/api/channels/:id', async (request: FastifyRequest, reply: FastifyReply) => {
