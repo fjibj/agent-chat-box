@@ -12,3 +12,32 @@ paths:
   docs: "docs"
   stories: "docs/stories"
   tests: "tests"
+
+# TEA (Test Engineering Architect) 配置
+tea:
+  # 测试产物输出目录
+  test_artifacts: docs/test-artifacts
+  # Playwright Utils 集成
+  tea_use_playwright_utils: true
+  # Pact.js 契约测试
+  tea_use_pactjs_utils: false
+  # Pact Broker MCP
+  tea_pact_mcp: "none"
+  # 浏览器自动化策略
+  tea_browser_automation: "auto"
+  # 执行模式
+  tea_execution_mode: "auto"
+  # 运行时能力探测
+  tea_capability_probe: true
+  # 项目类型
+  test_stack_type: "fullstack"
+  # CI 平台
+  ci_platform: "github-actions"
+  # 测试框架
+  test_framework: "playwright"
+  # 风险阈值
+  risk_threshold: "p1"
+  # 输出子目录
+  test_design_output: test-design
+  test_review_output: test-reviews
+  trace_output: traceability

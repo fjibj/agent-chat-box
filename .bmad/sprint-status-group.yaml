@@ -1,0 +1,151 @@
+version: "6.0.0"
+project_name: "Agent Chat Box — 群级扩展"
+project_level: 3
+current_sprint: 1
+sprint_plan_path: "docs/sprint-plan-agent-chat-box-group-expansion-2026-05-11.md"
+
+sprints:
+  - sprint_number: 1
+    start_date: "2026-05-11"
+    end_date: "2026-05-25"
+    capacity_points: 30
+    committed_points: 29
+    completed_points: 0
+    status: "not_started"
+    goal: "团队模型、群契约、成员管理、邀请码——群基础设施就绪"
+    stories:
+      - story_id: "STORY-G001"
+        title: "数据库迁移 — 团队表与 team_id 列"
+        points: 3
+        status: "not_started"
+      - story_id: "STORY-G002"
+        title: "团队 CRUD API"
+        points: 3
+        status: "not_started"
+      - story_id: "STORY-G003"
+        title: "Agent 归属管理"
+        points: 3
+        status: "not_started"
+      - story_id: "STORY-G004"
+        title: "协作者管理"
+        points: 3
+        status: "not_started"
+      - story_id: "STORY-G005"
+        title: "数据库迁移 — 群表"
+        points: 3
+        status: "not_started"
+      - story_id: "STORY-G006"
+        title: "群 CRUD API"
+        points: 3
+        status: "not_started"
+      - story_id: "STORY-G007"
+        title: "群契约配置"
+        points: 3
+        status: "not_started"
+      - story_id: "STORY-G008"
+        title: "邀请码与加入群"
+        points: 3
+        status: "not_started"
+      - story_id: "STORY-G009"
+        title: "退出群"
+        points: 2
+        status: "not_started"
+      - story_id: "STORY-G010"
+        title: "数据库迁移 — 群任务与授权表"
+        points: 3
+        status: "not_started"
+
+  - sprint_number: 2
+    start_date: "2026-05-25"
+    end_date: "2026-06-08"
+    capacity_points: 30
+    committed_points: 27
+    completed_points: 0
+    status: "not_started"
+    goal: "群任务发布、广播、claim、授权——跨团队任务全流程跑通"
+    stories:
+      - story_id: "STORY-G011"
+        title: "群任务发布 API"
+        points: 3
+        status: "not_started"
+      - story_id: "STORY-G012"
+        title: "群任务广播 (WebSocket)"
+        points: 5
+        status: "not_started"
+      - story_id: "STORY-G013"
+        title: "跨团队 Claim API"
+        points: 5
+        status: "not_started"
+      - story_id: "STORY-G014"
+        title: "Manual 授权模式"
+        points: 5
+        status: "not_started"
+      - story_id: "STORY-G015"
+        title: "Auto 授权模式"
+        points: 3
+        status: "not_started"
+      - story_id: "STORY-G016"
+        title: "跨团队任务重试"
+        points: 3
+        status: "not_started"
+      - story_id: "STORY-G020"
+        title: "信誉分记录"
+        points: 3
+        status: "not_started"
+
+  - sprint_number: 3
+    start_date: "2026-06-08"
+    end_date: "2026-06-22"
+    capacity_points: 30
+    committed_points: 31
+    completed_points: 0
+    status: "not_started"
+    goal: "跨团队 Review、信誉分查询、群管理 UI——群功能完整可用"
+    stories:
+      - story_id: "STORY-G017"
+        title: "任务产出回流"
+        points: 5
+        status: "not_started"
+      - story_id: "STORY-G018"
+        title: "Review 状态管理"
+        points: 3
+        status: "not_started"
+      - story_id: "STORY-G019"
+        title: "过程隐私保护"
+        points: 3
+        status: "not_started"
+      - story_id: "STORY-G021"
+        title: "信誉分查询 API"
+        points: 3
+        status: "not_started"
+      - story_id: "STORY-G022"
+        title: "信誉分阈值判定"
+        points: 2
+        status: "not_started"
+      - story_id: "STORY-G023"
+        title: "群管理页面"
+        points: 5
+        status: "not_started"
+      - story_id: "STORY-G024"
+        title: "跨团队任务看板"
+        points: 5
+        status: "not_started"
+      - story_id: "STORY-G025"
+        title: "授权审批 UI"
+        points: 3
+        status: "not_started"
+      - story_id: "STORY-G026"
+        title: "信誉分展示"
+        points: 2
+        status: "not_started"
+
+velocity:
+  sprint_1: null
+  sprint_2: null
+  sprint_3: null
+  rolling_average: null
+
+team:
+  size: 1
+  sprint_length_weeks: 2
+  capacity_per_sprint: 30

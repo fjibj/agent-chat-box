@@ -7,14 +7,19 @@ project_type: "web-app"
 project_level: 3
 communication_language: "Chinese"
 output_language: "Chinese"
-last_updated: "2026-05-02T00:00:00+08:00"
+last_updated: "2026-05-16T22:30:00+08:00"
 
 workflow_status:
   # Phase 1: Analysis
   - name: product-brief
     phase: 1
     status: "docs/product-brief.md"
-    description: "产品简报"
+    description: "产品简报（原始项目）"
+
+  - name: product-brief-group
+    phase: 1
+    status: "docs/product-brief-agent-chat-box-group-expansion-2026-05-11.md"
+    description: "群级扩展产品简报"
 
   - name: brainstorm-project
     phase: 1
@@ -30,7 +35,17 @@ workflow_status:
   - name: prd
     phase: 2
     status: "docs/prd-agent-chat-box-2026-05-01.md"
-    description: "产品需求文档"
+    description: "产品需求文档（原始项目）"
+
+  - name: prd-group
+    phase: 2
+    status: "docs/prd-agent-chat-box-group-expansion-2026-05-11.md"
+    description: "群级扩展产品需求文档"
+
+  - name: prd-federation
+    phase: 2
+    status: "docs/prd-federation-gateway-2026-05-16.md"
+    description: "联邦网关产品需求文档（网络拓扑、出入群、任务路由）"
 
   - name: tech-spec
     phase: 2
@@ -46,7 +61,17 @@ workflow_status:
   - name: architecture
     phase: 3
     status: "docs/architecture-agent-chat-box-2026-05-01.md"
-    description: "系统架构设计"
+    description: "系统架构设计（原始项目）"
+
+  - name: architecture-group
+    phase: 3
+    status: "docs/architecture-agent-chat-box-group-expansion-2026-05-11.md"
+    description: "群级扩展系统架构设计"
+
+  - name: architecture-federation
+    phase: 3
+    status: "docs/architecture-federation-gateway-2026-05-16.md"
+    description: "联邦网关架构设计（Hub/Runner 协议、消息格式、标签匹配）"
 
   - name: solutioning-gate-check
     phase: 3
@@ -57,14 +82,95 @@ workflow_status:
   - name: sprint-planning
     phase: 4
     status: "docs/sprint-plan-agent-chat-box-2026-05-01.md"
-    description: "Sprint 规划"
+    description: "Sprint 规划（原始项目）"
+
+  - name: sprint-planning-group
+    phase: 4
+    status: "docs/sprint-plan-agent-chat-box-group-expansion-2026-05-11.md"
+    description: "群级扩展 Sprint 规划"
 
   - name: create-story
     phase: 4
     status: "docs/stories/"
-    description: "创建用户故事 — 35 个故事全部完成"
+    description: "创建用户故事 — 原始 35 个故事 + 群级扩展 26 个故事全部完成"
+
+  - name: create-story-original
+    phase: 4
+    status: "docs/stories/"
+    description: "原始项目 35 个用户故事 (STORY-001 ~ STORY-035)"
+
+  - name: create-story-group
+    phase: 4
+    status: "docs/stories/"
+    description: "群级扩展 26 个用户故事 (STORY-G001 ~ STORY-G026)"
 
   - name: dev-story
     phase: 4
     status: "completed"
-    description: "开发实现 — 35/35 故事全部实现"
+    description: "开发实现 — 原始 35/35 + 群级扩展 26/26 = 61/61 故事全部实现"
+
+  - name: dev-story-original
+    phase: 4
+    status: "completed"
+    description: "原始 35 个故事代码实现完成"
+
+  - name: dev-story-group
+    phase: 4
+    status: "completed"
+    description: "群级扩展 26 个故事代码实现完成 (G001~G026: DB迁移/API/WebSocket/UI)"
+
+  - name: sprint-planning-federation
+    phase: 4
+    status: ".bmad/sprint-status-federation.yaml"
+    description: "联邦网关 Sprint 规划"
+
+  - name: create-story-federation
+    phase: 4
+    status: "docs/stories/"
+    description: "联邦网关用户故事"
+
+  - name: dev-story-federation
+    phase: 4
+    status: "completed"
+    description: "联邦网关开发实现 (F001~F010 全部完成)"
+
+  # Phase 5: Testing (TEA Module)
+  - name: tea-framework
+    phase: 5
+    status: "docs/test-artifacts/framework-setup.md"
+    description: "TEA: 搭建测试框架 (Playwright + Vitest) — 完成"
+
+  - name: test-design
+    phase: 5
+    status: "docs/test-artifacts/test-design/"
+    description: "TEA: 基于风险的测试设计 (P0-P3) — 完成: 35个测试用例覆盖26个故事"
+
+  - name: atdd
+    phase: 5
+    status: "docs/test-artifacts/atdd-completion-report-2026-05-15.md"
+    description: "TEA: 验收测试驱动开发 — 55个ATDD用例覆盖P0~P2全部22个Story + P3 API依赖，全部Green"
+
+  - name: automate
+    phase: 5
+    status: "docs/test-artifacts/automate-completion-report-2026-05-15.md"
+    description: "TEA: 自动化测试扩展 — Server 95 tests + Web 4 tests = 99 tests 全部 Green"
+
+  - name: test-review
+    phase: 5
+    status: "docs/test-artifacts/test-review-report-2026-05-15.md"
+    description: "TEA: 测试质量评审 — 综合评分 83/100 (B+)，群级扩展核心覆盖率 ~76%，2项即时缺口待关闭"
+
+  - name: traceability
+    phase: 5
+    status: "docs/test-artifacts/traceability-matrix-2026-05-15.md"
+    description: "TEA: 需求追踪矩阵与发布门禁 (Go/No-Go) — 完成，Decision: GO"
+
+  - name: tea-federation
+    phase: 5
+    status: "docs/test-artifacts/traceability-federation-2026-05-16.md"
+    description: "联邦网关测试（ATDD + Automate + Traceability + Go-No-Go）"
+
+  - name: tea-ci
+    phase: 5
+    status: "optional"
+    description: "TEA: CI/CD 质量流水线配置"

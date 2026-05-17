@@ -1,0 +1,76 @@
+version: "6.0.0"
+project_name: "Agent Chat Box — 联邦网关"
+project_level: 3
+current_sprint: 1
+sprint_plan_path: "docs/sprint-plan-federation-gateway-2026-05-16.md"
+
+sprints:
+  - sprint_number: 1
+    start_date: "2026-05-16"
+    end_date: "2026-05-30"
+    capacity_points: 30
+    committed_points: 18
+    completed_points: 18
+    status: "completed"
+    goal: "联邦协议 + Hub/Runner 基础设施就绪——团队B 能反向连接到团队A 的 Hub，完成注册和心跳"
+    stories:
+      - story_id: "STORY-F001"
+        title: "联邦消息协议定义（slock 信封格式）"
+        points: 3
+        status: "completed"
+      - story_id: "STORY-F002"
+        title: "数据库迁移 — federation_peers、labels 字段"
+        points: 2
+        status: "completed"
+      - story_id: "STORY-F003"
+        title: "Agent labels 注册与 Role Card 扩展"
+        points: 3
+        status: "completed"
+      - story_id: "STORY-F004"
+        title: "群 Hub Server 端点（注册、心跳、消息路由）"
+        points: 5
+        status: "completed"
+      - story_id: "STORY-F005"
+        title: "Runner 客户端（反向连接、poll、消息接收）"
+        points: 5
+        status: "completed"
+
+  - sprint_number: 2
+    start_date: "2026-05-30"
+    end_date: "2026-06-13"
+    capacity_points: 30
+    committed_points: 19
+    completed_points: 19
+    status: "completed"
+    goal: "跨团队任务路由 + 唤醒 + E2E——publish → poll → claim → wake → 执行 全流程跑通"
+    stories:
+      - story_id: "STORY-F006"
+        title: "标签匹配任务路由（required_labels ⊆ agent_labels）"
+        points: 3
+        status: "completed"
+      - story_id: "STORY-F007"
+        title: "群任务队列拉取模式（poll 替代广播）"
+        points: 5
+        status: "completed"
+      - story_id: "STORY-F008"
+        title: "Agent 跨团队唤醒（federation.claim wake trigger）"
+        points: 3
+        status: "completed"
+      - story_id: "STORY-F009"
+        title: "出入群联邦消息广播（member.joined / member.left）"
+        points: 3
+        status: "completed"
+      - story_id: "STORY-F010"
+        title: "E2E：跨团队任务发布 → claim → 完成全流程"
+        points: 5
+        status: "completed"
+
+velocity:
+  sprint_1: 18
+  sprint_2: 19
+  rolling_average: 18.5
+
+team:
+  size: 1
+  sprint_length_weeks: 2
+  capacity_per_sprint: 30
