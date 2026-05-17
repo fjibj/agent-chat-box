@@ -14,3 +14,6 @@ data/
 *.log
 .playwright-mcp/
 docs/api-keys.md
+test-results/
+*.bak
+*.png
