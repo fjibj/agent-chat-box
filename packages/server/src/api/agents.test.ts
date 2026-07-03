@@ -233,6 +233,25 @@ describe('Agents API', () => {
     });
   });
 
+  describe('GET /api/resolve-names', () => {
+    it('resolves team and group names', async () => {
+      const { app, db } = await buildApp();
+      db.run('INSERT INTO teams (id, name, owner_user_id, created_at) VALUES (?, ?, ?, ?)', ['team-x', 'Team X', 'user-x', 0]);
+      db.run(
+        'INSERT INTO groups (id, name, owner_team_id, contract_yaml, created_at) VALUES (?, ?, ?, ?, ?)',
+        ['group-x', 'Group X', 'team-x', '', 0],
+      );
+      db.save();
+
+      const res = await app.inject({ method: 'GET', url: '/api/resolve-names?ids=team-x,group-x,unknown-id' });
+      expect(res.statusCode).toBe(200);
+      const body = JSON.parse(res.payload);
+      expect(body.names['team-x']).toBe('Team X');
+      expect(body.names['group-x']).toBe('Group X');
+      expect(body.names['unknown-id']).toBe('unknown-...');
+    });
+  });
+
   describe('getAgentById', () => {
     it('returns agent for valid id', async () => {
       const { app } = await buildApp();

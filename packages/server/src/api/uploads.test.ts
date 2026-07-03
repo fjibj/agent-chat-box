@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { buildApp } from '../test-helpers.js';
 import fs from 'fs';
 import path from 'path';
@@ -38,7 +38,7 @@ describe('Uploads API', () => {
         },
       });
       // Expect either 400 (no file) or success depending on multipart setup
-      expect([200, 201, 400, 406, 415]).toContain(parseInt(res.statusCode));
+      expect([200, 201, 400, 406, 415]).toContain(res.statusCode);
     });
 
     it('rejects when no file provided', async () => {
@@ -48,7 +48,7 @@ describe('Uploads API', () => {
         url: '/api/uploads',
         payload: '',
       });
-      expect([400, 406]).toContain(parseInt(res.statusCode));
+      expect([400, 406]).toContain(res.statusCode);
     });
   });
 

@@ -1,170 +1,337 @@
-# Agent Chat Box - 跨机器多Agent任务调度平台
+# Agent Chat Box - 跨机器多 Agent 任务调度与协作平台
 
 ## 项目愿景
 
-构建一个分布式 Agent 协作平台，管理运行在不同机器（家庭电脑、公司电脑、云服务器）上的多种 AI 编程 Agent（Claude Code、Codex、OpenClaw、OpenCode、Hermes 等），实现：
-- 任务发布与争抢（竞争模式）
-- 任务分解与分工（协作模式）
-- Agent 间实时聊天与信息共享
+构建一个分布式 Agent 协作平台，管理运行在不同机器（家庭电脑、公司电脑、云服务器）上的多种 AI 编程 Agent（Claude Code、Codex、OpenClaw、Hermes 等），实现：
+
+- **跨机调度** — Daemon 反向连接，穿透 NAT，任意机器可部署
+- **任务争抢** — 多 Agent 竞争 claim（compete 模式）
+- **任务分解协作** — 大任务拆子任务，分配给不同 Agent（collaborate 模式）
+- **实时同频对话** — Agent 与人类在同一频道平等对话，@mention 自动唤醒
+- **跨团队联邦** — 群系统 + Hub/Runner 拓扑，支持多团队共享 Agent 能力
+
+当前版本 **v0.2.0**（2026-05-16）：
+- v0.1.0 基础调度已完成开发与测试；
+- v0.2.0 群级扩展 + 联邦网关已完成开发与 TEA 自动化测试；
+- v0.2.0 人工验证已制定计划（见 `docs/manual-verification.md`），尚未执行；
+- v0.2.0 follow-up stories（G027~G031、F011~F012、Q001）已完成开发与测试，用于关闭人工验证发现的 14 个 GAP。
 
 ## 核心架构
 
+### 单团队拓扑
+
 ```
 ┌─────────────────────────────────────────────────────┐
-│                   Central Server                     │
-│  ┌──────────┐ ┌──────────┐ ┌──────────┐ ┌────────┐ │
-│  │ TaskQueue │ │ AgentReg │ │ MsgRouter│ │ WebUI  │ │
-│  └──────────┘ └──────────┘ └──────────┘ └────────┘ │
-│         WebSocket / HTTP API                         │
-└──────────┬──────────────┬──────────────┬────────────┘
-           │              │              │
-    ┌──────┴──────┐ ┌─────┴──────┐ ┌────┴───────┐
-    │ Agent Worker│ │ Agent Worker│ │ Agent Worker│
-    │ (Home PC)   │ │ (Office PC) │ │ (Cloud VM) │
-    │ Claude Code │ │ Codex       │ │ OpenCode   │
-    └─────────────┘ └────────────┘ └────────────┘
+│                   Web UI (React 19)                  │
+│   Chat | Tasks | Groups | Authorizations | Agents    │
+└────────────────────────┬────────────────────────────┘
+                         │ WebSocket (/ws) + REST API
+┌────────────────────────┴────────────────────────────┐
+│              Central Server (Fastify 5)              │
+│  TaskQueue | AgentReg | MsgRouter | GroupManager     │
+│  WakeEngine | Reputation | AuthorizationGate         │
+│  Federation Hub | sql.js (SQLite WASM, schema v9)    │
+└──────┬──────────────┬──────────────┬────────────────┘
+       │ /daemon/connect (反向 WS)
+┌──────┴──────┐ ┌─────┴──────┐ ┌────┴───────┐
+│  Daemon A   │ │  Daemon B  │ │  Daemon C  │
+│ Claude Code │ │ Codex      │ │ OpenClaw   │
+└─────────────┘ └────────────┘ └────────────┘
 ```
 
-### 架构模式：中央调度 + Worker 反向连接
+### 联邦拓扑（跨团队，星型 Hub-Runner）
 
-- **中央服务器**：任务队列、Agent 注册、消息路由、Web 管理界面
-- **Worker 端**：每台机器运行一个 Agent Worker，主动连接中央服务器（解决 NAT 穿透问题）
-- **通信协议**：WebSocket（实时）+ HTTP API（管理操作）
+```
+                    [群 Hub Server]
+                    (群主团队托管，仅此节点需公网暴露)
+                         ↑
+        ┌────────────────┼────────────────┐
+        │ WSS /federation │ WSS /federation │ (反向连接)
+        ↓                ↓                ↓
+   [团队A Server]   [团队B Server]   [团队C Server]
+        ↑                ↑                ↑
+   [Daemon A1]      [Daemon B1]      [Daemon C1]
+```
+
+### 关键设计
+
+- **反向连接** — Daemon 主动连接 Server，无需 Daemon 公网暴露
+- **联邦反向连接** — 成员团队 Server 主动 WSS 连接群 Hub，仅 Hub 需公网
+- **统一信封** — WebSocket 与联邦消息共用 `{ v, id, type, ts, [from, to,] data }` 结构
+- **Hub 不维护实时态** — 通过 `federation_task_index` 队列 + Runner poll 解耦
 
 ## 技术栈
 
-### 服务端
-- **运行时**: Node.js + TypeScript
-- **框架**: Fastify (HTTP) + ws (WebSocket)
-- **数据库**: SQLite (开发) / PostgreSQL (生产)
-- **任务队列**: 内置队列（初期）/ BullMQ + Redis（扩展）
-
-### Agent Worker
-- **语言**: TypeScript（统一 SDK）
-- **Agent 适配器模式**: 每种 Agent 实现统一接口
-
-### 前端
-- **框架**: React + TypeScript
-- **UI**: Tailwind CSS + shadcn/ui
-- **实时更新**: WebSocket
+| 层 | 技术 |
+|---|---|
+| 服务器 | Fastify 5 + ws 8 + sql.js 1.11（WASM SQLite，无原生依赖） |
+| 联邦网关 | WebSocket + 自定义协议（slock 信封风格） |
+| Daemon | Node.js 20+ + ws + 进程管理 + Agent 适配器 |
+| 前端 | React 19 + Vite 6 + Tailwind CSS 4 + React Router |
+| 类型 | TypeScript strict mode + ESM |
+| 包管理 | npm（monorepo，根目录管理依赖） |
+| 测试 | Vitest 3（337+ 用例：根 76 + server 236 + web 25）+ Playwright 1.49 E2E |
+| 代码风格 | ESLint 9 + Prettier 3 |
 
 ## 设计原则
 
 ### SOLID
-- **S**: 每个模块单一职责 — TaskQueue 只管队列，AgentRegistry 只管注册
-- **O**: 新增 Agent 类型通过适配器扩展，不修改调度核心
-- **L**: AgentAdapter 子类型可替换使用
-- **I**: 接口专一，IWorkerAdapter / ISchedulerAdapter / IMessageAdapter 分离
-- **D**: 调度器依赖抽象适配器，不依赖具体 Agent 实现
+- **S**: 每个模块单一职责 — `task-queue` 只管队列、`wake-engine` 只管唤醒、`reputation` 只管评分
+- **O**: 新 Agent 类型通过 `agent-driver/` 适配器扩展，不改调度核心
+- **L**: `AgentDriver` 子类型可替换使用（claude-code / codex / openclaw / hermes）
+- **I**: 接口分离 — REST API、WS handler、Federation Hub 各自独立模块
+- **D**: 调度器依赖抽象 driver 接口，不依赖具体 Agent 实现
 
 ### KISS
-- 初期用 SQLite + 内置队列，不过度引入基础设施
-- WebSocket 够用就不上 gRPC
+- 用 sql.js（WASM SQLite）省掉 native 编译；用内置队列省掉 Redis
+- WebSocket 够用，不上 gRPC；联邦协议复用 WS 信封，不另起协议栈
 
 ### YAGNI
-- 第一版不做 P2P、不做分布式调度器、不做权限系统
-- 先跑通单服务器 + 多 Worker
+- 不做 P2P、不做分布式调度器；Hub 仅做路由不维护实时态
+- 联邦信任模型只做"邀请码 + 信誉分 + 闸门"，不引入 PKI / 区块链
 
 ### DRY
-- Agent 适配器统一接口，不重复实现连接/重连/心跳逻辑
+- Agent 适配器统一基类（`agent-driver/base.ts`），重连/心跳/进程管理逻辑只写一次
+- 联邦信封复用 WS 信封结构，仅扩展 `from` / `to` 字段
 
 ## 核心模块
 
-### 1. TaskQueue（任务队列）
-- 发布任务（标题、描述、优先级、标签）
-- 任务状态机：pending → claimed → running → completed / failed
-- 竞争模式：多 Agent 争抢，先 claim 先得
-- 协作模式：任务分解为子任务，分配给不同 Agent
+### 服务端（packages/server/src/）
 
-### 2. AgentRegistry（Agent 注册中心）
-- Agent 注册/注销/心跳
-- 能力标签（擅长语言、工具链、算力等级）
-- 在线状态管理
+| 模块 | 职责 |
+|---|---|
+| `modules/task-queue` | 任务状态机、争抢/指派、超时重试 |
+| `modules/wake-engine` | Agent 唤醒触发（mention / dm / task_assigned / task_available / federation_claim） |
+| `modules/reputation` | 团队信誉分累计与查询 |
+| `api/agents` | Agent 注册、状态、能力查询 |
+| `api/channels` `api/messages` | 频道与消息 REST |
+| `api/tasks` `api/group-tasks` | 任务 / 群级任务 REST |
+| `api/teams` `api/groups` | 团队与群管理（含邀请码） |
+| `api/authorizations` | 跨团队授权请求 / 审批闸门 |
+| `api/reviews` | 任务产出审核工作流 |
+| `api/reputation` | 信誉分查询 |
+| `api/uploads` | 多文件附件上传 |
+| `api/machines` | 机器注册（API key 哈希） |
+| `ws/handler` | WebSocket 消息路由（human + daemon） |
+| `federation/hub` | 群主侧 Hub：注册、心跳、任务广播、claim 路由 |
+| `federation/runner` | 成员侧 Runner：反向连接、task poll、Agent 唤醒 |
+| `federation/protocol` | 联邦信封编解码、消息类型枚举 |
+| `db` | sql.js 初始化、schema v9 迁移 |
 
-### 3. MsgRouter（消息路由器）
-- Agent 间点对点聊天
-- 广播消息
-- 任务关联的消息（讨论上下文）
+### Daemon（packages/daemon/src/）
 
-### 4. AgentWorker（Agent Worker SDK）
-- 统一适配器接口
-- 自动重连、心跳
-- 任务拉取/执行/回报
+| 模块 | 职责 |
+|---|---|
+| `index.ts` | 入口、CLI 参数、生命周期 |
+| `connection.ts` | WS 反向连接 + 心跳 + 自动重连（指数退避 1→30s） |
+| `process-manager.ts` | Agent 进程派生、stdin/stdout 管道 |
+| `runtime-detector.ts` | 自动探测本机已安装的 Agent CLI |
+| `agent-driver/{base,claude-code,codex,openclaw,hermes}.ts` | 各类 Agent 适配器 |
 
-### 5. WebUI（管理界面）
-- 任务看板（Kanban）
-- Agent 状态面板
-- 聊天/消息流
-- 任务统计
+### 前端（packages/web/src/）
 
-## 目录结构（规划）
+| 页面/组件 | 职责 |
+|---|---|
+| `pages/ChatPage`（App 内联） | 频道列表 + 消息流 + @mention 自动补全 |
+| `pages/TasksPage` → `TaskBoard` | 任务看板 + 详情弹窗 + 创建表单 |
+| `pages/GroupsPage` | 群管理：创建、邀请码、契约 YAML 编辑 |
+| `pages/AuthorizationsPage` | 跨团队授权请求审批 |
+| `pages/AgentsPage` | Agent 状态监控、能力标签 |
+| `pages/SettingsPage` | 服务器/Daemon 配置 |
+| `components/ReputationBadge` | 信誉分徽章 |
+| `hooks/useWebSocket` | WS 连接 + 自动重连 |
+
+## 目录结构（实际）
 
 ```
 agent-chat-box/
 ├── CLAUDE.md
-├── package.json
+├── README.md
+├── CHANGELOG.md
+├── package.json                # 根 workspace
 ├── tsconfig.json
-├── apps/
-│   ├── server/              # 中央服务器
-│   │   ├── src/
-│   │   │   ├── modules/
-│   │   │   │   ├── task-queue/     # 任务队列模块
-│   │   │   │   ├── agent-registry/ # Agent 注册模块
-│   │   │   │   ├── msg-router/     # 消息路由模块
-│   │   │   │   └── web-api/        # HTTP API
-│   │   │   ├── ws/                 # WebSocket 处理
-│   │   │   └── db/                 # 数据库
-│   │   └── package.json
-│   ├── worker/              # Agent Worker
-│   │   ├── src/
-│   │   │   ├── adapters/           # Agent 适配器
-│   │   │   │   ├── claude-code.ts
-│   │   │   │   ├── codex.ts
-│   │   │   │   ├── openclaw.ts
-│   │   │   │   ├── opencode.ts
-│   │   │   │   └── hermes.ts
-│   │   │   ├── core/               # Worker 核心逻辑
-│   │   │   └── sdk/                # 对外 SDK
-│   │   └── package.json
-│   └── web/                 # 前端界面
-│       ├── src/
-│       └── package.json
+├── eslint.config.js
+├── vitest.config.ts
+├── playwright.config.ts
 ├── packages/
-│   ├── shared/              # 共享类型、常量
-│   └── protocol/            # 通信协议定义
-└── docs/
+│   ├── shared/                 # 共享类型 + 协议常量
+│   │   └── src/{types.ts, constants.ts, index.ts}
+│   ├── server/                 # 中央服务器
+│   │   └── src/
+│   │       ├── index.ts        # Fastify 启动 + WS 升级处理
+│   │       ├── api/            # REST 路由（agents/channels/groups/...）
+│   │       ├── modules/        # task-queue / wake-engine / reputation
+│   │       ├── federation/     # hub / runner / protocol
+│   │       ├── ws/             # WebSocket handler
+│   │       └── db/             # schema.sql + sql.js 适配
+│   ├── daemon/                 # Agent Daemon
+│   │   └── src/
+│   │       ├── index.ts
+│   │       ├── connection.ts
+│   │       ├── process-manager.ts
+│   │       ├── runtime-detector.ts
+│   │       └── agent-driver/   # 各 Agent 适配器
+│   └── web/                    # Web UI（React 19 + Vite 6）
+│       └── src/{App.tsx, pages/, components/, hooks/, utils/}
+├── tests/                      # 项目级集成测试
+│   ├── api/                    # health / agents / channels / messages / tasks / machines
+│   ├── unit/                   # db / task-queue
+│   └── helpers.ts
+├── e2e/                        # Playwright E2E
+│   ├── core-flows.spec.ts
+│   ├── federation.spec.ts
+│   └── auth.setup.ts
+├── docs/                       # 设计文档（PRD / 架构 / Sprint / 用户故事 / 验证记录）
+│   └── stories/                # 71 个用户故事
+├── data/                       # SQLite 数据文件（运行时生成）
+└── .github/workflows/test.yml  # CI
 ```
 
-## 开发约定
+## 协议设计
 
-- **语言**: TypeScript strict mode
-- **包管理**: pnpm workspace
-- **代码风格**: ESLint + Prettier
-- **注释语言**: 英文
-- **提交规范**: Conventional Commits
-- **测试**: Vitest
+### WebSocket 信封（packages/shared/src/types.ts）
 
-## 协议设计要点
-
-### WebSocket 消息格式
 ```typescript
 interface WSMessage {
-  type: string;          // 消息类型
-  payload: unknown;      // 消息体
-  from?: string;         // 发送者 ID
-  to?: string;           // 接收者 ID（点对点）
-  timestamp: number;
+  v: 1;
+  id?: string;
+  type: string;
+  ts: number;
+  data: unknown;
 }
 ```
 
-### 关键消息类型
-- `agent:register` / `agent:heartbeat` / `agent:disconnect`
-- `task:create` / `task:claim` / `task:update` / `task:complete`
-- `chat:direct` / `chat:broadcast` / `chat:task-scoped`
+### 联邦信封（slock 风格）
 
-## 第一阶段目标（MVP）
+```typescript
+interface FederationMessage {
+  v: number;
+  id: string;
+  type: FederationMessageType;
+  ts: number;
+  from: string;     // teamId
+  to?: string;      // teamId（可选，广播时省略）
+  data: unknown;
+}
+```
 
-1. 中央服务器：任务队列 + Agent 注册 + 消息路由
-2. Agent Worker SDK：至少支持 Claude Code 适配器
-3. 基础 WebUI：任务列表 + Agent 状态 + 简单聊天
-4. 竞争模式跑通：发布任务 → Agent 争抢 → 执行 → 完成
+### WebSocket 端点
+
+| 路径 | 用途 |
+|---|---|
+| `/ws` | Web UI 客户端 |
+| `/daemon/connect` | Daemon 反向连接 |
+| `/federation` | 跨团队 Hub-Runner |
+
+### 关键消息类型（packages/shared/src/constants.ts:MSG）
+
+- **Agent**: `agent.hello` / `agent.heartbeat` / `agent.sleep` / `agent.wake` / `agent.bye`
+- **Message**: `message.send` / `message.new` / `message.history` / `message.ack`
+- **Task**: `task.create` / `task.claim` / `task.update` / `task.completed` / `task.failed` / `task.subtasks`
+- **Channel**: `channel.create` / `channel.join` / `channel.leave`
+- **Human**: `human.identify` / `human.identified`
+- **Group**: `group.created` / `group.joined` / `group.left` / `group.task.*` / `group.contract.updated`
+- **Authorization**: `authorization.requested` / `approved` / `rejected` / `expired`
+- **Review**: `review.requested` / `review.completed`
+- **Federation**: `federation.register` / `heartbeat` / `member.joined` / `member.left` / `task.broadcast` / `task.claim` / `agent.wake`
+
+## 数据模型（schema v9，packages/server/src/db/schema.sql）
+
+14 张表覆盖完整业务：
+
+- **身份**: `teams` · `team_members` · `machines` · `agents`（含 `labels` 字段）
+- **群系统**: `groups`（含 `contract_yaml`、`invite_code`）· `group_members`
+- **会话**: `channels` · `channel_members` · `messages`
+- **任务**: `tasks`（状态含 `pending_authorization`）· `group_tasks`
+- **治理**: `authorization_requests` · `reputation_records`
+- **联邦**: `federation_peers` · `federation_task_index`
+
+任务状态机：
+```
+pending → claimed → running → (decomposing | verifying) → completed
+                                        ↓
+                                      failed
+       (跨团队需先经 pending_authorization → approved/rejected)
+```
+
+Agent 状态：`sleeping` → `awake` → `running` → `sleeping`（或 `offline`）
+
+## 当前能力（v0.2.0 已落地）
+
+✅ 跨机调度：Daemon 反向连接、自动重连、心跳超时检测
+✅ 三种任务模式：compete（争抢）/ assign（指派）/ collaborate（分解）
+✅ 实时聊天：@mention 自动唤醒 Agent、消息历史、附件上传
+✅ 4 类 Agent 适配器：Claude Code / Codex / OpenClaw / Hermes
+✅ 群系统：创建群、邀请码（带过期/次数限制）、入群/退群、成员角色
+✅ 群契约：YAML 配置授权模式、信任阈值、共享能力、可见性
+✅ 跨团队任务：`required_capabilities` 约束、授权闸门（手动/自动）
+✅ 信誉分系统：基于任务完成质量累计
+✅ Review 工作流：审核任务产出、通过/拒绝、回池
+✅ 联邦网关：Hub/Runner 星型拓扑、标签匹配路由、跨团队 Agent 唤醒
+✅ Web UI：6 个主页面（Chat / Tasks / Groups / Authorizations / Agents / Settings）
+✅ 337+ 个自动化测试（Vitest + Playwright），TEA 决策 GO
+✅ v0.2.0 follow-up stories 完成：Groups 生命周期 UI、Agent labels、TaskBoard 群任务区分、ReputationBadge 接入、Review UI、Federation Peers 面板、质量门禁与 CI
+
+## 下阶段方向（候选）
+
+> 未排期，按用户/产品决策启动。
+
+- 分层组织扩展：Domain（多群聚合）→ World（跨域联邦）
+- 任务依赖图、并发约束、SLA 监控
+- 权限系统：用户认证、Team RBAC、API key 管理
+- 可观测性：结构化日志、指标埋点、追踪
+- Agent 能力评估：自动信誉算法、能力画像
+- 持久化升级：PostgreSQL 适配器（保留 sql.js 作为 dev 模式）
+- 任务结果归档与全文检索
+
+## 开发约定
+
+- **语言**: TypeScript strict + ESM
+- **包管理**: npm（`npm install` 在根目录运行）
+- **代码风格**: ESLint + Prettier，`npm run lint` / `npm run format`
+- **注释语言**: 英文（保持代码库统一）
+- **提交规范**: Conventional Commits（`feat:` / `fix:` / `docs:` / `chore:` / `test:`）
+- **测试**: Vitest（`npm test`），server/web 测试分别进入对应目录运行，`npm run quality:gates` 跑质量门禁
+- **CI**: `.github/workflows/test.yml`
+
+### 常用命令
+
+```bash
+npm install                   # 安装所有依赖
+npm run dev:server            # 启动服务器（tsx watch 热重载）
+npm run dev:web               # 启动 Web UI（Vite dev server）
+npm run build                 # 构建 shared + server + daemon
+npm test                      # 跑根目录 Vitest 测试
+cd packages/server && ../../node_modules/.bin/vitest run  # 跑 server 测试
+cd packages/web && ../../node_modules/.bin/vitest run     # 跑 web 测试
+npm run quality:gates         # 跑 BMAD/TEA 质量门禁
+pnpm typecheck                # tsc --noEmit 全量类型检查
+pnpm lint                     # ESLint
+pnpm format                   # Prettier 写回
+```
+
+### Daemon 启动
+
+```bash
+pnpm --filter @agent-chat-box/daemon start -- \
+  --server ws://localhost:3000 \
+  --token <machine-api-key>
+```
+
+### 联邦 Runner 启动（成员团队）
+
+```bash
+FEDERATION_URL=ws://hub.example.com/federation \
+FEDERATION_INVITE_CODE=ABC123 \
+FEDERATION_TEAM_ID=team-b \
+pnpm --filter @agent-chat-box/server start
+```
+
+## 工作准则（给 Claude Code）
+
+1. **先读再改** — 任何修改前先读相关文件，理解现有模式与命名风格
+2. **不主动 git** — 除非用户明确要求，不执行 `git commit` / `git push` / 分支操作
+3. **危险操作确认** — 删除文件、批量修改、改 schema、生产 API 调用前必须确认
+4. **遵循英文注释约定** — 新增/修改代码注释一律英文，与现有代码库一致
+5. **基于事实** — 用工具查证，不凭记忆；优先 `rg` / 专用工具，不滥用 shell
+6. **演进式重构** — 不为未来需求过度设计；YAGNI 优先

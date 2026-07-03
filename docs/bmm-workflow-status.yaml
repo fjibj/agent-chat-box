@@ -7,7 +7,7 @@ project_type: "web-app"
 project_level: 3
 communication_language: "Chinese"
 output_language: "Chinese"
-last_updated: "2026-05-16T22:30:00+08:00"
+last_updated: "2026-06-21T00:00:00+08:00"
 
 workflow_status:
   # Phase 1: Analysis
@@ -163,14 +163,40 @@ workflow_status:
   - name: traceability
     phase: 5
     status: "docs/test-artifacts/traceability-matrix-2026-05-15.md"
-    description: "TEA: 需求追踪矩阵与发布门禁 (Go/No-Go) — 完成，Decision: GO"
+    description: "TEA: 需求追踪矩阵与发布门禁 — 自动化测试阶段 Decision: GO；人工验证 Addendum 后调整为 CONDITIONAL GO"
+
+  - name: ac-coverage-v0.2.0
+    phase: 5
+    status: "docs/test-artifacts/ac-coverage-matrix-v0.2.0.md"
+    description: "TEA: v0.2.0 AC 覆盖矩阵 — 识别 UI/流程 AC 覆盖不足，作为 follow-up stories 输入"
+
+  - name: tea-quality-gate
+    phase: 5
+    status: "docs/test-artifacts/tea-quality-gate.md"
+    description: "TEA: 质量门禁规则 — AC 覆盖、状态枚举、组件集成、TODO/版本号/孤儿组件检查"
 
   - name: tea-federation
     phase: 5
     status: "docs/test-artifacts/traceability-federation-2026-05-16.md"
-    description: "联邦网关测试（ATDD + Automate + Traceability + Go-No-Go）"
+    description: "联邦网关测试（ATDD + Automate + Traceability + Go-No-Go）— 自动化阶段 GO；人工验证发现 claim routing TODO，需 follow-up"
 
   - name: tea-ci
     phase: 5
     status: "optional"
     description: "TEA: CI/CD 质量流水线配置"
+
+  # Phase 6: Manual Verification & Process Quality Gates
+  - name: manual-verification-v0.2.0
+    phase: 6
+    status: "docs/manual-verification.md"
+    description: "v0.2.0 人工验证计划 — 203 项 Web UI + 后端联动验证，当前为人工验证中"
+
+  - name: process-retrospective-v0.2.0
+    phase: 6
+    status: "docs/process-retrospective-v0.2.0.md"
+    description: "BMAD/TEA 流程回顾 — 将自动化测试 GO 调整为 CONDITIONAL GO 的根因分析与改进建议"
+
+  - name: bmad-story-quality-gate
+    phase: 6
+    status: "docs/bmad-story-quality-gate.md"
+    description: "BMAD: 故事质量门禁 — UI Entry Points、State Mapping、能力闭环、TODO follow-up 规则"

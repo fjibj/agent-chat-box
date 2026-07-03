@@ -157,7 +157,14 @@ export async function registerGroupTaskRoutes(app: FastifyInstance): Promise<voi
     stmt.bind(params);
     const tasks: Array<Record<string, unknown>> = [];
     while (stmt.step()) {
-      tasks.push(stmt.getAsObject());
+      const row = stmt.getAsObject() as Record<string, unknown>;
+      tasks.push({
+        ...row,
+        isGroupTask: Boolean(row.is_group_task),
+        sourceTeamId: ((row.gt_source_team_id as string | null) ?? (row.source_team_id as string | null)) ?? undefined,
+        groupId: gid,
+        authorizationStatus: (row.authorization_status as string | null) ?? undefined,
+      });
     }
     stmt.free();
 

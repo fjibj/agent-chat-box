@@ -184,18 +184,38 @@ describe('Federation Hub', () => {
     });
 
     it('returns pending_authorization status', async () => {
+      const teamA = await createTeam(app, 'Source', 'user-a');
+      const teamB = await createTeam(app, 'Runner', 'user-b');
+      const group = await createGroup(app, 'Federation Claim Group', teamA.id);
+      db.run('INSERT INTO group_members (group_id, team_id, role, joined_at) VALUES (?, ?, ?, ?)', [group.id, teamB.id, 'member', 0]);
+      db.run(
+        `INSERT INTO tasks (id, title, priority, mode, status, creator_id, is_group_task, source_team_id, created_at, timeout_seconds, max_retries, retry_count)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        ['task-123', 'Federated task', 'normal', 'compete', 'pending', 'user-a', 1, teamA.id, 1000, 3600, 0, 0],
+      );
+      db.run(
+        'INSERT INTO group_tasks (task_id, group_id, source_team_id, authorization_status, created_at) VALUES (?, ?, ?, ?, ?)',
+        ['task-123', group.id, teamA.id, 'none', 1000],
+      );
+      db.save();
+      indexGroupTask('task-123', group.id, teamA.id, []);
+
       const res = await app.inject({
         method: 'POST',
         url: '/api/federation/claim',
         payload: {
           task_id: 'task-123',
           agent_id: 'agent-456',
-          team_id: 'team-789',
+          team_id: teamB.id,
         },
       });
       expect(res.statusCode).toBe(200);
       const body = JSON.parse(res.payload);
       expect(body.status).toBe('pending_authorization');
+
+      registerMockPeer(teamB.id, group.id);
+      const pollRes = await app.inject({ method: 'GET', url: `/api/federation/poll?team_id=${teamB.id}` });
+      expect(JSON.parse(pollRes.payload).tasks).toHaveLength(0);
     });
   });
 

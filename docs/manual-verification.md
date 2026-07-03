@@ -1,7 +1,7 @@
 # Agent Chat Box 人工验证记录
 
-**项目版本:** v0.1.0
-**验证日期:** 2026-05-02
+**项目版本:** v0.2.0 follow-up（人工验证计划）
+**验证日期:** 2026-05-02（v0.1.0 验证）/ 待执行（v0.2.0 验证）
 **验证环境:** 两台 Windows 10 电脑，通过 Tailscale 组网
 
 ---
@@ -12,7 +12,7 @@
 
 ```
 ┌─────────────────┐         Tailscale          ┌─────────────────┐
-│   家里电脑       │ ◄═══════════════════════► │   公司电脑       │
+│   家里电脑      │ ◄═══════════════════════►  │   公司电脑      │
 │  (home-pc)      │     100.112.136.37         │  (office-pc)    │
 │  100.104.216.20 │       100.104.216.20       │                 │
 └────────┬────────┘                            └─────────────────┘
@@ -509,163 +509,560 @@ start /min "ACB-Daemon" node daemon.cjs --server ws://100.112.136.37:3000 --toke
 
 ---
 
-# 附录：群扩展 & 联邦网关 Web UI 人工验证清单（v0.2.0）
 
-**Date:** 2026-05-16
-**Scope:** 群级扩展 (G001~G026) + 联邦网关 (F001~F010) 的 Web 界面功能
-**Note:** 联邦底层协议（Runner 反向 WSS 连接、心跳、poll 轮询、自动重连、出入群广播等）已在 `docs/federation-e2e-manual-test-guide.md` 中完成验证，本清单聚焦 **Web UI 操作与相关后端联动**。
+# 附录：v0.2.0 群扩展 & 联邦网关人工验证计划
+
+**项目版本:** v0.2.0
+**计划创建日期:** 2026-06-20
 **Verifier:** _____________
+**验证状态:** ⬜ 未开始 / 🔄 进行中 / ✅ 全部通过 / ❌ 阻塞
 
 ---
 
-## 验证前准备
+## A. 验证目标与范围
 
-### 环境检查
-- [ ] 服务器启动无报错，`/api/health` 返回 ok
-- [ ] 233 个自动化测试全部通过 (`cd packages/server && npx vitest run`)
-- [ ] Web UI 可访问：`http://localhost:3000`
-- [ ] 至少已注册 1 台 Machine 和 1 个 Agent（用于任务认领验证）
+### A.1 目标
+- 验证 v0.2.0 群级扩展 (Stories G001~G026) 与联邦网关 (Stories F001~F010) 在 Web UI 上的端到端可用性
+- 校核自动化测试 (233 用例) 已覆盖的逻辑是否在真实交互中表现一致
+- 暴露 UI 缺口与已知限制（用于发版说明 / 下一迭代输入）
 
-### 测试数据准备
-本验证需要**两个团队**上下文。建议预置方式（可通过 UI 或 API）：
-- **Team A（群主团队）**：用于创建群、发布群任务、审批授权
-- **Team B（成员团队）**：用于入群、跨团队 claim、生成授权请求
+### A.2 范围
+本计划聚焦 **Web 界面 + 后端联动**，按页面与功能纵向拆分。
+联邦底层协议（Runner 反向 WSS、心跳、poll、自动重连、出入群广播等）已在 `docs/federation-e2e-manual-test-guide.md` 中验证，本计划只校核 UI 触发的相关链路。
 
-> 提示：若先通过 API 预置团队/群/Agent，可让 UI 验证更聚焦界面本身。预置脚本可参考 `docs/federation-e2e-manual-test-guide.md` 步骤 1~3。
-
----
-
-## 模块一：导航栏与路由
-
-验证顶部导航栏新增菜单项是否正确渲染，路由切换是否正常，页面挂载时数据加载是否成功。
-
-| # | 操作 | 预期结果 | 状态 | 关联代码 / 设计 |
-|---|------|----------|------|----------------|
-| V-UI-01 | 浏览器打开 `http://localhost:3000` | 页面加载，默认进入 Chat 页面 | [ ] | `App.tsx` `BrowserRouter`，`/` 路由映射；`ChatPage.tsx` 挂载 |
-| V-UI-02 | 观察顶部导航栏 | 显示 6 个链接：Chat、Tasks、Groups、Authorizations、Agents、Settings | [ ] | `App.tsx` nav 区域，`ROUTES` 常量包含 `/` `/tasks` `/groups` `/authorizations` `/agents` `/settings` |
-| V-UI-03 | 点击 "Groups" | 路由切换到 `/groups`，左侧显示群列表面板，右侧显示群详情或空状态提示 | [ ] | `GroupsPage.tsx` 挂载；`useEffect` 中调用 `GET /api/groups?team_id=` 加载群列表 |
-| V-UI-04 | 点击 "Authorizations" | 路由切换到 `/authorizations`，显示授权请求列表页面 | [ ] | `AuthorizationsPage.tsx` 挂载；`useEffect` 中调用 `GET /api/authorizations/pending?team_id=` |
-| V-UI-05 | 点击 "Agents" | 路由切换到 `/agents`，显示机器与 Agent 列表面板 | [ ] | `AgentsPage.tsx` 挂载；并发调用 `GET /api/machines` + `GET /api/agents` 聚合数据 |
-| V-UI-06 | 点击 "Tasks" | 路由切换到 `/tasks`，显示任务看板（Kanban：Pending / In Progress / Completed） | [ ] | `TaskBoard.tsx` 挂载；`GET /api/tasks` 拉取全部任务并按 `status` 分栏渲染 |
+### A.3 不在本次范围
+- 性能压力测试
+- 安全渗透测试
+- NPM 发布与 Daemon 升级
+- v0.1.0 已在 §1~§9 验证过的功能（除非 v0.2.0 改动了相关代码）
 
 ---
 
-## 模块二：Groups 页面 — 群生命周期管理
+## B. 已知 UI 限制（验证前请阅）
 
-重点验证群的创建、加入、契约配置、邀请码生成、成员管理等核心功能。每一步 UI 操作同步验证前端状态管理、REST API 调用、后端业务规则与数据持久化。
+下列项目在代码层面**确认未实现 UI**，需在验证中以 API/SQL 方式补齐操作：
 
-### 2.1 群列表与创建
+| 编号 | 限制描述 | 影响验证项 | 临时操作方式 |
+|------|----------|------------|--------------|
+| L-01 | Add Agent 模态框缺少 `labels` 输入字段 | M3 联邦标签匹配 | 通过 `PATCH /api/agents/:id` 或直接改 SQLite 添加 labels |
+| L-02 | GroupsPage 没有 "Leave Group" 按钮 | M2 退群流程 | 调用 `POST /api/groups/:id/leave` body=`{team_id}` |
+| L-03 | GroupsPage 没有 "Delete Group" 按钮 | M2 解散群 | 调用 `DELETE /api/groups/:id` |
+| L-04 | `ReputationBadge` 组件未在任何页面渲染（仅在测试中引用） | M5 信誉分展示 | 验证 `GET /api/groups/:gid/reputation` 数据正确即可，UI 待补 |
+| L-05 | 没有 Reviews UI 页面 | M6 Review 工作流 | 调用 `POST /api/tasks/:tid/review` body=`{decision, reviewer_id}` |
+| L-06 | 没有 Group Tasks 专属页面（群任务混在 Tasks 看板中） | M4 群任务发布 | 通过 `POST /api/groups/:gid/tasks` 发布 |
+| L-07 | Settings 页面 `version` 仍硬编码 `0.1.0`（来自 `/api/server-info`） | A.1 环境检查 | 已知问题，不阻塞验证 |
+| L-08 | 没有 Federation Peers 状态面板 | M7 联邦连接观测 | `SELECT * FROM federation_peers` 直接查 DB |
+| L-09 | Authorizations 页面只展示当前 `team-default` 团队作为审批方 | M5 跨团队场景 | 默认 `team_id` 写死为 `team-default`，需切换团队需改 hardcode 或 API 直调 |
+| L-10 | Authorizations 页面 "Team:" 只显示 `team_id.slice(0,8)`（截断 UUID） | M5 团队识别 | 通过 `GET /api/teams/:id` 验证完整团队信息 |
 
-| # | 操作 | 预期结果 | 状态 | 关联代码 / 设计 |
-|---|------|----------|------|----------------|
-| V-UI-07 | 进入 Groups 页面，观察左侧列表 | 若已有群，显示群名称列表；若无，显示空状态提示（如 "No groups yet"） | [ ] | `GroupsPage.tsx` sidebar 区域渲染 `groups` state；`GET /api/groups?team_id=` 响应结构 |
-| V-UI-08 | 点击左侧 "+ New" 按钮 | 弹出创建群表单，包含 Name / Description / Owner Team 下拉选择 | [ ] | `GroupsPage.tsx` `showCreateForm` state 控制表单显隐；表单受控组件绑定 |
-| V-UI-09 | 填写 Name="UI-Test-Group"，Description="for manual verification"，选择 Owner Team，点击 "Create" | 表单关闭，左侧列表新增该群，右侧自动加载群详情；网络面板可见 `POST /api/groups` 请求 | [ ] | `POST /api/groups` → `db/schema.sql` `groups` 表插入记录；返回体包含自动生成的 `contract_yaml` 默认值（`shared_capabilities` / `authorization: manual` / `trust_threshold: 0.5`） |
-| V-UI-10 | 观察右侧群详情头部 | 显示群名称、Description、"Invite Code" 按钮；若为成员身份则显示 "Leave" 按钮 | [ ] | `GroupsPage.tsx` detail header 渲染；`GET /api/groups/:id` 返回 `name`、`description`、`members` 数组；前端根据 `currentTeamId` 判断 owner/member 角色 |
-
-### 2.2 邀请码与入群
-
-| # | 操作 | 预期结果 | 状态 | 关联代码 / 设计 |
-|---|------|----------|------|----------------|
-| V-UI-11 | 在群详情中点击 "Invite Code" 按钮 | 弹出/显示邀请码（8 位大写字母数字），显示有效期和最大使用次数 | [ ] | `POST /api/groups/:id/invite` 返回 `invite_code`、`expires_at`、`max_uses`；前端将邀请码渲染到弹窗或提示框 |
-| V-UI-12 | 复制邀请码，在左侧 "Invite Code" 输入框粘贴，选择要加入的 Team，点击 "Join" | 左侧列表刷新，该群成员列表新增加入的团队 | [ ] | `POST /api/groups/join` → 后端校验 `invite_code` 有效性 → 写入 `group_members` 表 → 返回 `{ success: true, group_id }`；前端重新调用 `GET /api/groups/:id` 刷新详情 |
-| V-UI-13 | 再次用同一邀请码尝试让同一团队加入 | 界面提示错误信息（如 "Team already in this group"），不重复添加 | [ ] | 后端 `groups.ts` 重复入群校验返回 400；前端将 `error` 字段渲染为红色提示 |
-
-### 2.3 群契约编辑器
-
-| # | 操作 | 预期结果 | 状态 | 关联代码 / 设计 |
-|---|------|----------|------|----------------|
-| V-UI-14 | 在群详情中找到契约编辑器（Contract Editor）区域 | 显示 Authorization Mode 下拉框、Trust Threshold 滑块 (0-1)、Max Tasks/Hour 数字输入、Visibility 复选框组（Task Output / Internal Log） | [ ] | `GroupsPage.tsx` contract editor 区域；`GET /api/groups/:id/contract` 返回 YAML 解析后的 JSON 对象；前端映射到各表单控件 |
-| V-UI-15 | 将 Authorization Mode 从 "manual" 改为 "auto" | 下拉框显示 "auto"；滑块和输入框仍保持可编辑状态 | [ ] | 前端 `select` 受控组件更新 state；`PATCH /api/groups/:id/contract` 时 `authorization` 字段值为 `"auto"`；后端存储为 YAML 字符串 |
-| V-UI-16 | 拖动 Trust Threshold 滑块到 0.3 | 滑块实时显示 0.3（或对应百分比标签） | [ ] | `GroupsPage.tsx` `input[type="range"]` 绑定 `trust_threshold`（0~1 浮点数）；影响 auto 授权模式下是否自动通过 claim |
-| V-UI-17 | 修改 Max Tasks Per Hour 为 10 | 输入框显示 10，无校验错误提示 | [ ] | `GroupsPage.tsx` `input[type="number"]` 绑定 `max_tasks_per_hour`；后端契约约束中的速率限制参数 |
-| V-UI-18 | 勾选 "Task Output" visibility，取消勾选 "Internal Log" | 两个复选框状态同步更新，互不影响 | [ ] | `visibility` 对象结构 `{ task_output: boolean, internal_log: boolean }`；控制跨团队任务产出可见范围 |
-| V-UI-19 | 在 Shared Capabilities 中添加 "python"（若 UI 支持直接编辑；否则通过 API 预置后刷新） | 契约中包含 `python` 能力项；保存后刷新页面仍存在 | [ ] | `contract_yaml` 中的 `shared_capabilities` 数组；`group-tasks.ts` 发布任务时校验 `required_capabilities` 必须为该数组子集 |
-| V-UI-20 | 点击 "Save Contract" | 按钮进入 loading 状态或短暂禁用，随后提示保存成功；刷新页面后契约配置保持 | [ ] | `PATCH /api/groups/:id/contract` → 后端 YAML 序列化存储 → `GET /api/groups/:id/contract` 读取持久化数据；验证端到端数据一致性 |
-
-### 2.4 成员列表与退群
-
-| # | 操作 | 预期结果 | 状态 | 关联代码 / 设计 |
-|---|------|----------|------|----------------|
-| V-UI-21 | 观察群详情中的 Members 区域 | 显示所有成员团队（owner + 已加入的成员），含团队名称和角色标识（Owner / Member） | [ ] | `GET /api/groups/:id` 返回 `members` 数组（含 `team_id`、`role`、`joined_at`）；前端渲染角色标签 |
-| V-UI-22 | 成员团队视角点击 "Leave Group"（或等效退群操作） | 确认后退群成功，该群从左侧列表消失；群主视角刷新后成员列表中该团队消失 | [ ] | `POST /api/groups/:id/leave` → 删除 `group_members` 记录 → 若该团队为联邦 Runner，触发 `hub.ts` `disconnectPeer` 清理 `federation_task_index` 中该团队已 claim 但未完成的任务（状态重置为 `open`） |
+**约定：**
+- ✅ = 验证通过、行为符合预期
+- ❌ = 不通过、需修复或记录已知问题
+- ⏭️ = 跳过（受限于已知限制 L-XX）
 
 ---
 
-## 模块三：Authorizations 页面 — 授权闸门
+## C. 验证前准备
 
-验证跨团队任务 claim 后生成的授权请求在前端的展示、审批、拒绝流程，以及自动刷新机制。
+### C.1 环境检查清单
 
-| # | 操作 | 预期结果 | 状态 | 关联代码 / 设计 |
-|---|------|----------|------|----------------|
-| V-UI-23 | **前置：**通过 API 或群任务 UI 发布一个群任务，并用 Team B 的 Agent 执行 `group-claim`，使任务进入 `pending_authorization` 状态 | — | [ ] | `POST /api/groups/:groupId/tasks` + `POST /api/tasks/:id/group-claim`；后端生成 `authorization_requests` 表记录，状态为 `pending`，含 5 分钟倒计时 `expires_at` |
-| V-UI-24 | 点击导航栏 "Authorizations" | 页面显示待授权请求列表，每个卡片包含：任务标题、描述、申请 Agent 名称、请求团队名称、剩余有效期倒计时 | [ ] | `AuthorizationsPage.tsx` 挂载；`useEffect` 中轮询 `GET /api/authorizations/pending?team_id=`（10 秒间隔）；卡片组件渲染 `task_title`、`agent_name`、`requesting_team_id`、`expires_at` |
-| V-UI-25 | 观察授权请求卡片按钮 | 每个请求卡片显示 "Approve"（绿色/主色）和 "Reject"（红色/危险色）两个按钮 | [ ] | `AuthorizationsPage.tsx` 按钮渲染；`authorization` 状态机设计：`pending` → `approved` / `rejected` / `expired` |
-| V-UI-26 | 点击 "Approve" | 该卡片从列表移除（或状态变为已批准），对应任务状态流转为 `claimed` | [ ] | `POST /api/authorizations/:id/approve` → 更新 `authorization_requests` 状态为 `approved` → 任务表 `status` 变更为 `claimed` → 若为联邦任务，触发 `wake-engine.ts` `federation_claim` wake 类型，向 Runner 发送 `agent.wake` 消息 |
-| V-UI-27 | 重新制造一个 pending 授权请求，点击 "Reject" | 卡片从列表移除，对应任务状态回退为 `pending`，可被再次 claim | [ ] | `POST /api/authorizations/:id/reject` → `authorization_requests` 状态变为 `rejected` → `group-tasks.ts` 将任务 `status` 回写为 `pending`（回池逻辑） |
-| V-UI-28 | 保持页面打开，等待 >10 秒 | 页面自动刷新数据，与后端同步；无明显页面闪烁或滚动条复位 | [ ] | `AuthorizationsPage.tsx` `setInterval(10000)` 自动刷新；验证前端状态更新策略（增量更新 vs 全量刷新） |
+| # | 检查项 | 命令 / 操作 | 状态 |
+|---|--------|-------------|------|
+| C-01 | 当前在 main 分支且工作树干净（除已知未提交文件） | `git status` | [ ] |
+| C-02 | 依赖已安装 | `npm install` | [ ] |
+| C-03 | 自动化测试全部通过（根 76 + server 236 + web 25 = 337 用例） | `npm test` + server/web vitest | [ ] |
+| C-04 | typecheck 通过 | `npm run typecheck` | [ ] |
+| C-05 | 服务器启动无报错 | `npm run dev:server` | [ ] |
+| C-06 | Web UI 启动无报错 | `npm run dev:web` | [ ] |
+| C-07 | `/api/health` 返回 `{ status: 'ok' }` | `curl http://localhost:3000/api/health` | [ ] |
+| C-08 | 浏览器访问 `http://localhost:5173`（dev）或 `http://localhost:3000`（生产构建） | 打开 DevTools → Network/Console | [ ] |
+| C-09 | DevTools Console 无报错（除已知 React DevTools 提示） | F12 查看 | [ ] |
+| C-10 | 默认团队 `team-default` 已存在 | `curl http://localhost:3000/api/teams?user_id=user-default` | [ ] |
 
----
+### C.2 测试数据准备
 
-## 模块四：Agents 页面 — Agent 标签（Labels）
+需要预置 **2 个团队 + 1 个群 + 4 个 Agent**。建议用 `curl` 或 Postman 一次性建好：
 
-验证 Agent 注册及 `labels` 字段在前端的展示。注意：当前 UI 的 "Add Agent" 表单缺少 `labels` 输入框，需在验证中记录此已知限制。
+```bash
+# 1. 创建 Team B（成员团队）
+curl -X POST http://localhost:3000/api/teams \
+  -H 'Content-Type: application/json' \
+  -d '{"name":"Team-B","user_id":"user-b"}'
+# → 记下返回的 team_id，记为 TEAM_B_ID
 
-| # | 操作 | 预期结果 | 状态 | 关联代码 / 设计 |
-|---|------|----------|------|----------------|
-| V-UI-29 | 进入 Agents 页面 | 显示机器列表，每台机器可展开/折叠，显示其下属 Agent（名称、Runtime、状态 badge） | [ ] | `AgentsPage.tsx` 渲染逻辑；并发 `GET /api/machines` + `GET /api/agents` 数据聚合；按 `machine_id` 分组展示 |
-| V-UI-30 | 观察已有 Agent 卡片 | 若该 Agent 在数据库中有 `labels` 数据（通过 API 预置或 DB 写入），卡片应显示标签列表 badge（如 `python`、`review`、`linux`） | [ ] | `api/agents.ts` 返回 `labels` 字段（`schema.sql` v9 新增 `TEXT DEFAULT '[]'`）；前端渲染标签 chip/badge 列表 |
-| V-UI-31 | 点击 "+ Add Agent" | 弹出创建模态框，包含 Machine 下拉选择、Name 文本输入、Runtime 单选/下拉选择 | [ ] | `AgentsPage.tsx` modal 组件；`POST /api/agents` 参数校验（`machineId`、`name`、`runtime` 必填） |
-| V-UI-32 | **已知限制验证：** 观察 Add Agent 模态框 | 当前 UI **缺少 `labels` 输入字段**。创建 Agent 后，后端默认 `labels` 为空数组 `[]` | [ ] | `AgentsPage.tsx` modal 表单组件未实现 `labels` 输入；`api/agents.ts` 中 `labels` 参数默认 `JSON.stringify([])`；联邦标签匹配 (`hub.ts` `checkLabelMatch`) 数据源依赖此字段 |
-| V-UI-33 | 通过 API 为刚创建的 Agent 添加 labels `["python","review"]`，刷新 Agents 页面 | Agent 卡片正确显示 `python`、`review` 标签 badge | [ ] | 验证前端是否正确读取并渲染 `labels` 字段；`PATCH /api/agents/:id` 或 `POST /api/agents` 直接携带 labels；与联邦 poll 标签过滤逻辑的数据链路完整性 |
+# 2. 在 Team A (team-default) 与 Team B 各注册 1 台机器
+curl -X POST http://localhost:3000/api/machines \
+  -H 'Content-Type: application/json' \
+  -d '{"name":"machine-a1"}'
+# → 记下 apiKey，启动 daemon
 
----
+curl -X POST http://localhost:3000/api/machines \
+  -H 'Content-Type: application/json' \
+  -d '{"name":"machine-b1"}'
 
-## 模块五：Tasks 页面 — 群任务看板
+# 3. 启动两个 daemon 进程（用各自的 apiKey），观察 /api/machines 状态变 online
+# 4. 通过 daemon 自动注册或 POST /api/agents 手工建 Agent，至少各 1 个
+# 5. 给 agent-a1 加 labels=["python","review"]，给 agent-b1 加 labels=["python"]
+sqlite3 data/agent-chat-box.sqlite \
+  "UPDATE agents SET labels='[\"python\",\"review\"]' WHERE name='agent-a1';"
+```
 
-验证群任务在任务看板中的展示、状态流转视觉反馈、以及群任务与内部任务的区分。
-
-| # | 操作 | 预期结果 | 状态 | 关联代码 / 设计 |
-|---|------|----------|------|----------------|
-| V-UI-34 | 进入 Tasks 页面 | 看板显示三列：Pending / In Progress / Completed；列标题与任务卡片正常渲染 | [ ] | `TaskBoard.tsx` Kanban 布局；`GET /api/tasks` 拉取所有任务（含 `is_group_task=1` 的群任务） |
-| V-UI-35 | **前置：**已通过 API 或群页面创建群任务 | 群任务出现在 Pending 列；任务卡片显示标题、优先级 badge（High/Medium/Low）、模式 badge（compete/assign/collaborate） | [ ] | `TaskCard.tsx` 渲染逻辑；`GET /api/tasks` 返回群任务的 `priority`、`mode`、`status` 字段；badge 颜色与文本按枚举映射 |
-| V-UI-36 | 观察群任务卡片视觉标识 | 卡片应标识为群任务（如显示 "GROUP" 标签、地球图标、或来源团队名称，若 UI 已实现） | [ ] | `TaskCard.tsx` 对 `is_group_task` 或 `source_team_id` 的视觉处理；`GET /api/resolve-names` 解析来源团队名称替代 UUID |
-| V-UI-37 | 点击群任务卡片打开详情 | 弹出详情模态框，显示：标题、描述、当前状态、模式、创建者名称（非 UUID）、认领者名称（如有）、子任务进度条（协作模式） | [ ] | `TaskCard.tsx` onClick 事件打开详情弹窗；详情组件调用 `GET /api/tasks/:id` 或复用已有列表数据；`resolve-names` 机制保证名称可读性 |
-| V-UI-38 | 在群任务被跨团队 claim 并进入 `pending_authorization` 后，刷新 Tasks 页面 | 该任务卡片仍显示在 Pending 列，状态 badge 显示 `pending_authorization`（或特殊标识） | [ ] | `tasks.ts` / `group-tasks.ts` 状态机：`pending` → `pending_authorization` → `claimed`；看板分栏逻辑按 `status` 归类；验证状态枚举在 UI 中的完整覆盖 |
-| V-UI-39 | 授权批准后，刷新 Tasks 页面 | 任务从 Pending 列移到 In Progress 列，状态显示 `claimed` 或后续变为 `running` | [ ] | 授权批准后任务状态流转触发看板重新归类；`TaskBoard.tsx` 按 `status` 过滤分组逻辑；验证 WebSocket 或轮询机制是否实时同步看板 |
-
----
-
-## 模块六：Chat 页面 — 跨团队上下文（可选）
-
-若群成员在聊天频道中有交互，验证跨团队可见性与 Agent 状态同步。
-
-| # | 操作 | 预期结果 | 状态 | 关联代码 / 设计 |
-|---|------|----------|------|----------------|
-| V-UI-40 | 进入 Chat 页面，观察右侧成员列表 | 若群任务已授权批准且 Agent 被唤醒，Agent 在线状态应在成员列表中正确显示（机器人图标 + Agent 名称 + awake 状态） | [ ] | `ws/handler.ts` Agent 状态广播（`agent.hello` / `agent.status`）；`MemberList.tsx` 在线成员渲染；联邦 wake 后 Daemon 启动 Agent 进程，状态变为 `awake` 并广播 |
-| V-UI-41 | 在群上下文相关的频道中发送消息 | 消息发送者名称正确显示（非 UUID），跨团队成员（若在同一共享频道）应能收到消息 | [ ] | `broadcastToChannel` 消息路由逻辑；`messages.ts` `sender_name` 列持久化；`resolveSenderName` 解析逻辑保证名称可读 |
-
----
-
-## 验证结果汇总
-
-| 模块 | 总项数 | 通过 | 失败 | 跳过 | 备注 |
-|------|--------|------|------|------|------|
-| 导航栏与路由 | 6 | | | | |
-| Groups 页面 — 群生命周期 | 16 | | | | |
-| Authorizations 页面 — 授权闸门 | 6 | | | | |
-| Agents 页面 — Agent 标签 | 5 | | | | |
-| Tasks 页面 — 群任务看板 | 6 | | | | |
-| Chat 页面 — 跨团队上下文 | 2 | | | | |
-| **总计** | **41** | | | | |
+| # | 准备项 | 状态 | 备注 |
+|---|--------|------|------|
+| D-01 | Team A (team-default) 存在并是 owner | [ ] | seed 数据自带 |
+| D-02 | Team B 创建成功，记录 TEAM_B_ID | [ ] | TEAM_B_ID = ____________ |
+| D-03 | Machine A1 在线（status=online） | [ ] | |
+| D-04 | Machine B1 在线（status=online） | [ ] | |
+| D-05 | Agent A1（runtime=claude，labels=`["python","review"]`） | [ ] | AGENT_A1_ID = ____________ |
+| D-06 | Agent B1（runtime=claude，labels=`["python"]`） | [ ] | AGENT_B1_ID = ____________ |
+| D-07 | Agent A2（runtime=codex，labels=`[]`，用于"无能力 agent"对照组） | [ ] | AGENT_A2_ID = ____________ |
+| D-08 | DevTools Network 标签已开启，便于观察 API 请求 | [ ] | |
 
 ---
 
-## 签名
+## D. 模块一：导航栏与路由 (M1)
 
-- **验证日期：** ___________
+验证顶部导航的 6 个菜单项渲染、路由切换、各页面挂载时数据加载是否成功。
+
+| # | 步骤 | 预期结果 | 状态 | 关联代码 |
+|---|------|----------|------|----------|
+| M1-01 | 浏览器打开 Web UI 根路径 | 页面加载，默认进入 Chat 页面（地址栏显示 `/`） | [ ] | `App.tsx:194` `Route path="/"` |
+| M1-02 | 观察顶部导航栏 | 显示 6 个链接：Chat、Tasks、Groups、Authorizations、Agents、Settings；当前激活项有蓝灰色背景 | [ ] | `App.tsx:182-188` NavLink 组件 |
+| M1-03 | 点击 "Chat"  | 路由 `/`，左侧 ChannelList、中间消息列表、右侧 MemberList | [ ] | `ChatPage` |
+| M1-04 | 点击 "Tasks" | 路由 `/tasks`，看板 3 列：Pending / In Progress / Completed | [ ] | `TaskBoard.tsx:147` |
+| M1-05 | 点击 "Groups" | 路由 `/groups`，左侧群列表（含 + New 按钮、Invite Code 输入框、Join 按钮），右侧空提示 "Select a group to view details" | [ ] | `GroupsPage.tsx:114` |
+| M1-06 | 点击 "Authorizations" | 路由 `/authorizations`，标题 "Authorization Requests"，下方 "No pending authorization requests" 或卡片列表 | [ ] | `AuthorizationsPage.tsx:60` |
+| M1-07 | 点击 "Agents" | 路由 `/agents`，"Machines & Agents" 标题 + "+ Add Agent" 按钮，下方按机器分组的 Agent 列表 | [ ] | `AgentsPage.tsx:84` |
+| M1-08 | 点击 "Settings" | 路由 `/settings`，显示 Server Info / Connection / API Keys 三个分组 | [ ] | `SettingsPage.tsx:84` |
+| M1-09 | DevTools Network 观察 Groups 页面加载 | 触发 `GET /api/groups?team_id=team-default`，返回 200 | [ ] | `GroupsPage.tsx:36-42` |
+| M1-10 | DevTools Network 观察 Authorizations 页面加载 | 触发 `GET /api/authorizations/pending?team_id=team-default`，返回 200 | [ ] | `AuthorizationsPage.tsx:20-25` |
+| M1-11 | DevTools Network 观察 Agents 页面加载 | 同时触发 `GET /api/machines` + `GET /api/agents`，均返回 200 | [ ] | `AgentsPage.tsx:25-32` |
+| M1-12 | 顶部连接状态指示灯 | 绿色（已连接 WebSocket） | [ ] | `App.tsx:177` |
+| M1-13 | 用户名右上角显示 | 显示登录时输入的姓名而非 UUID | [ ] | `App.tsx:180` |
+| M1-14 | 浏览器 F5 刷新当前页面 | 路由保持，不会跳回 `/`（React Router 客户端路由生效） | [ ] | `App.tsx:194` BrowserRouter |
+| M1-15 | URL 直接输入 `/groups` 回车 | 直接进入 Groups 页面，不会 404 | [ ] | `index.ts:205` SPA fallback |
+
+---
+
+## E. 模块二：Groups 页面 — 群生命周期 (M2)
+
+### M2.1 群列表与创建
+
+| # | 步骤 | 预期结果 | 状态 | 关联代码 |
+|---|------|----------|------|----------|
+| M2-01 | 进入 Groups 页面，无任何群时观察左侧 | 显示空白列表，"+ New" 按钮可见，Invite Code 输入框 + Join 按钮可见 | [ ] | `GroupsPage.tsx:117-132` |
+| M2-02 | 点击 "+ New" | 右侧出现创建表单：Name 输入框（focus）、Description 多行文本框、Create / Cancel 按钮 | [ ] | `GroupsPage.tsx:151-170` |
+| M2-03 | Name 留空，点击 "Create" | 按钮无响应（前端 `if (!newGroupName.trim()) return;`），不发请求 | [ ] | `GroupsPage.tsx:55-56` |
+| M2-04 | 填 Name="UI-Test-Group"，Description="manual verification"，点 Create | Network 触发 `POST /api/groups` body 含 `name`, `description`, `owner_team_id="team-default"`，返回 201 | [ ] | `GroupsPage.tsx:55-73`，`groups.ts:26-77` |
+| M2-05 | 创建成功后界面变化 | 表单关闭，左侧列表新增 "UI-Test-Group" 条目，显示 "0 members" | [ ] | `GroupsPage.tsx:66-71` |
+| M2-06 | 点击列表中的 "UI-Test-Group" | 右侧显示群详情：标题 + 描述 + Invite Code 按钮 + Members（owner=team-default） + Contract 编辑器 | [ ] | `GroupsPage.tsx:171-265` |
+| M2-07 | 后端验证默认契约 | DevTools 观察 `GET /api/groups/:id/contract`，返回 `authorization=manual`, `trust_threshold=0.5`, `shared_capabilities=[code,review,test]` | [ ] | `groups.ts:7-21` `DEFAULT_CONTRACT_YAML` |
+| M2-08 | 创建第二个群 "Team-Collab-Group"，描述任意 | 列表出现两条目，可切换 | [ ] | |
+| M2-09 | 取消按钮：点 "+ New" → 填一半 → 点 "Cancel" | 表单关闭，Name 字段清空，左侧列表无新增 | [ ] | `GroupsPage.tsx:168` |
+| M2-10 | 创建群时网络断开（DevTools Offline） | 错误提示横幅显示 "Failed to create group" | [ ] | `GroupsPage.tsx:72` `setError` |
+
+### M2.2 邀请码生成与有效期
+
+| # | 步骤 | 预期结果 | 状态 | 关联代码 |
+|---|------|----------|------|----------|
+| M2-11 | 选中 "UI-Test-Group"，点击 "Invite Code" | 触发 `POST /api/groups/:id/invite`，返回 8 位大写字母数字（如 `A3F5B2C1`） | [ ] | `groups.ts:274-311` |
+| M2-12 | 邀请码显示位置 | 标题下方紫色提示框，字体等宽，包含完整邀请码 | [ ] | `GroupsPage.tsx:188-192` |
+| M2-13 | 再次点击 "Invite Code" | 生成新邀请码，旧码失效（DB 字段被覆盖） | [ ] | `groups.ts:296-300` UPDATE 语句 |
+| M2-14 | 验证默认有效期 24 小时 | 后端响应 `expires_at` ≈ now + 86400 秒 | [ ] | `groups.ts:292` `expiresInHours = 24` |
+| M2-15 | 邀请码 max_uses 默认无限 | 后端响应 `max_uses=null` | [ ] | `groups.ts:291` |
+
+### M2.3 加入群
+
+| # | 步骤 | 预期结果 | 状态 | 关联代码 |
+|---|------|----------|------|----------|
+| M2-16 | **前置：** 先用 API 把 `currentUser` 切到 Team B（`team-default` → TEAM_B_ID），即修改 `GroupsPage.tsx:33` `useState('team-default')`，或直接调 API 验证后端逻辑 | — | [ ] | L-09 限制 |
+| M2-17 | 复制邀请码到 Invite Code 输入框，点 "Join"（带 Team B 上下文） | `POST /api/groups/join` body=`{invite_code, team_id=TEAM_B_ID}`，返回 `{success:true, group_id}` | [ ] | `groups.ts:314-386` |
+| M2-18 | 加入成功后界面变化 | 左侧群列表多一条；选中后 Members 区域含 Team B（角色 member） | [ ] | `GroupsPage.tsx:93-97` `fetchGroups()` |
+| M2-19 | **重复入群测试：** Team B 再次用同一码 Join | 错误提示 "Team already in this group" | [ ] | `groups.ts:356-362` |
+| M2-20 | **过期码测试：** SQL 把 `groups.invite_code_expires_at` 改为 `now-1`，再 Join | 错误提示 "Invite code has expired" | [ ] | `groups.ts:345-348` |
+| M2-21 | **无效码测试：** 输入 `ZZZZZZZZ`（不存在）点 Join | 错误 "Invalid invite code" | [ ] | `groups.ts:332-335` |
+| M2-22 | **限次测试：** 用 API 生成 max_uses=1 的邀请码，先后两个团队 Join | 第二个返回 "Invite code has reached maximum uses" | [ ] | `groups.ts:351-353` |
+
+### M2.4 退群与解散（受限 L-02 / L-03）
+
+| # | 步骤 | 预期结果 | 状态 | 关联代码 |
+|---|------|----------|------|----------|
+| M2-23 | ⏭️ UI 退群 | UI 无 Leave 按钮，跳过 | [ ] | L-02 |
+| M2-24 | API 退群：`POST /api/groups/:id/leave` body=`{team_id=TEAM_B_ID}` | 返回 `{success:true}`，DB `group_members` 行删除 | [ ] | `groups.ts:389-429` |
+| M2-25 | 刷新 Groups 页面（Team B 上下文） | 列表中不再有该群 | [ ] | |
+| M2-26 | **owner 退群限制：** API 调 `leave` 用 `team-default` | 返回 400 "Group owner cannot leave. Delete the group instead." | [ ] | `groups.ts:410-412` |
+| M2-27 | ⏭️ UI 解散群 | UI 无 Delete 按钮，跳过 | [ ] | L-03 |
+| M2-28 | API 解散群：`DELETE /api/groups/:id`（必须 owner 团队） | 返回 `{success:true}`，DB `groups`+`group_members` 行删除 | [ ] | `groups.ts:155-179` |
+| M2-29 | 解散后刷新 Groups 页面 | 该群从列表消失 | [ ] | |
+| M2-30 | 解散后查询 `GET /api/groups/:id` | 返回 404 "Group not found" | [ ] | |
+
+### M2.5 群契约编辑器
+
+| # | 步骤 | 预期结果 | 状态 | 关联代码 |
+|---|------|----------|------|----------|
+| M2-31 | 选中已有群，观察契约编辑器区域 | 包含 Authorization Mode 下拉、Trust Threshold 滑块、Max Tasks Per Hour 数字框、两个 visibility 复选框、Save Contract 按钮 | [ ] | `GroupsPage.tsx:208-263` |
+| M2-32 | Authorization Mode 默认值 | 显示 "Manual"（与 DEFAULT_CONTRACT_YAML 对齐） | [ ] | `GroupsPage.tsx:214` |
+| M2-33 | 切换 Authorization 为 "Auto" | 下拉显示 Auto；state 更新 | [ ] | `GroupsPage.tsx:215` onChange |
+| M2-34 | 拖动 Trust Threshold 滑块到 0.7 | 滑块右下角显示 "0.7"（step=0.1） | [ ] | `GroupsPage.tsx:223-233` |
+| M2-35 | Max Tasks Per Hour 默认 10，改成 20 | 输入框显示 20 | [ ] | `GroupsPage.tsx:236-243` |
+| M2-36 | 默认勾选状态 | "Show task output" 勾选 ✅，"Show internal logs" 未勾选 ❌ | [ ] | `GroupsPage.tsx:247,256` |
+| M2-37 | 点击 "Save Contract" | `PATCH /api/groups/:id/contract`，body 含 `authorization:auto, trust_threshold:0.7, resource_quota.max_tasks_per_hour:20`，返回 `{success:true}` | [ ] | `groups.ts:227-271` |
+| M2-38 | 刷新页面，再次进入该群 | 编辑器显示 Auto / 0.7 / 20，状态持久化 | [ ] | YAML 读写一致性 |
+| M2-39 | **非法 trust_threshold：** API 直调 PATCH 设为 1.5 | 返回 400 "trust_threshold must be between 0 and 1" | [ ] | `groups.ts:252-257` |
+| M2-40 | **非法 authorization：** API 直调 PATCH 设为 "invalid" | 返回 400 "authorization must be auto or manual" | [ ] | `groups.ts:248-251` |
+| M2-41 | shared_capabilities 字段：UI 未提供编辑入口（已知设计） | 验证 `GET /api/groups/:id/contract` 仍返回默认 `[code, review, test]` | [ ] | UI 限制 |
+| M2-42 | 直接 PATCH 修改 shared_capabilities 加 "python" | 后续 M4 群任务发布需要此能力 | [ ] | |
+
+### M2.6 成员列表展示
+
+| # | 步骤 | 预期结果 | 状态 | 关联代码 |
+|---|------|----------|------|----------|
+| M2-43 | 群详情 Members 区域 | 列出所有成员团队（`team_name` + 角色 badge） | [ ] | `GroupsPage.tsx:194-204` |
+| M2-44 | Owner 团队角色显示 | 角色 badge 显示 "owner" | [ ] | `groups.ts:60-62` |
+| M2-45 | 通过邀请码加入的团队角色 | 角色 badge 显示 "member" | [ ] | `groups.ts:367-369` |
+| M2-46 | 团队名称解析正确（非 UUID） | 通过 SQL JOIN `teams.name`，UI 显示真实名称 | [ ] | `groups.ts:96-100` |
+
+---
+
+## F. 模块三：Agents 页面 — 标签 (M3)
+
+### M3.1 机器与 Agent 列表
+
+| # | 步骤 | 预期结果 | 状态 | 关联代码 |
+|---|------|----------|------|----------|
+| M3-01 | 进入 Agents 页面 | 顶部 "Machines & Agents" 标题，"+ Add Agent" 按钮 | [ ] | `AgentsPage.tsx:86-94` |
+| M3-02 | 无机器时观察 | 显示 "No machines registered. Register a machine first." | [ ] | `AgentsPage.tsx:99-101` |
+| M3-03 | 已有机器时观察 | 每台机器卡片：🖥 emoji + 名称 + ID 缩写 + 状态指示灯（绿/灰）| [ ] | `AgentsPage.tsx:104-120` |
+| M3-04 | Agent 列表展示 | 缩进显示 Agent 名称、runtime badge、状态指示灯（awake=绿，sleeping=黄，running=蓝） | [ ] | `AgentsPage.tsx:122-146` |
+| M3-05 | currentTaskId 不为空的 Agent | 显示 "Working" 蓝色文字 | [ ] | `AgentsPage.tsx:135-137` |
+| M3-06 | DevTools Network | `GET /api/machines` 与 `/api/agents` 各调用 1 次 | [ ] | `AgentsPage.tsx:25-32` |
+
+### M3.2 添加 Agent（关注 labels 缺失）
+
+| # | 步骤 | 预期结果 | 状态 | 关联代码 |
+|---|------|----------|------|----------|
+| M3-07 | 点 "+ Add Agent" | 弹出模态：Machine 下拉、Name 文本框、Runtime 下拉（claude/codex/openclaw/hermes） | [ ] | `AgentsPage.tsx:155-211` |
+| M3-08 | ⚠️ **关键限制：观察模态框字段** | **没有 labels 输入字段**（L-01）；Capabilities、Role Card 也无 | [ ] | L-01 |
+| M3-09 | 填写：Machine=Machine A1, Name="ui-agent", Runtime=codex，点 Add | `POST /api/agents` body 不含 labels，返回 200，新 Agent 出现在列表 | [ ] | `agents.ts` |
+| M3-10 | DB 验证：刚创建 Agent 的 labels 字段 | `SELECT labels FROM agents WHERE name='ui-agent';` 返回 `[]`（默认空） | [ ] | `schema.sql:65` |
+| M3-11 | 删除 Agent：点击列表项的 "Delete" 链接 | `DELETE /api/agents/:id` 返回 200，列表移除 | [ ] | `AgentsPage.tsx:55-64` |
+
+### M3.3 Labels 显示与影响
+
+| # | 步骤 | 预期结果 | 状态 | 关联代码 |
+|---|------|----------|------|----------|
+| M3-12 | 通过 SQL 给 agent-a1 添加 labels=`["python","review"]` | `UPDATE agents SET labels='["python","review"]' WHERE id=...;` 成功 | [ ] | |
+| M3-13 | 刷新 Agents 页面，观察 agent-a1 卡片 | ⚠️ **当前 UI 不渲染 labels**（页面只显示名称+runtime+状态）；通过 `GET /api/agents` 检查响应中 `labels` 字段存在 | [ ] | `AgentsPage.tsx:127-146` 未读取 labels |
+| M3-14 | 联邦 poll 端点验证 labels 生效 | `curl 'http://localhost:3000/api/federation/poll?team_id=...&labels=python,review'` 返回该团队群任务列表 | [ ] | `hub.ts:308-372` |
+| M3-15 | labels 子集匹配：群任务 required_labels=`["python"]` | agent_labels 含 python 的 Runner poll 时能取到该任务 | [ ] | `hub.ts:347-348` |
+
+---
+
+## G. 模块四：群任务发布与跨团队 Claim (M4)
+
+群任务核心流程：源团队发任务 → 跨团队 claim → 待审批 → 批准/拒绝 → 状态流转。
+
+### M4.1 群任务发布（受限 L-06，使用 API）
+
+| # | 步骤 | 预期结果 | 状态 | 关联代码 |
+|---|------|----------|------|----------|
+| M4-01 | API 发布群任务（Team A 视角） | `POST /api/groups/:gid/tasks` body=`{title:"群任务-1", source_team_id:"team-default", creator_id:"user-default", required_capabilities:["python"]}` 返回 201 | [ ] | `group-tasks.ts:11-123` |
+| M4-02 | 验证 task 是 group_task | `SELECT is_group_task, source_team_id FROM tasks WHERE id=...;` → `(1, "team-default")` | [ ] | `group-tasks.ts:75-93` |
+| M4-03 | 验证 group_tasks 关联记录 | `SELECT * FROM group_tasks WHERE task_id=...;` → 含 group_id, source_team_id, authorization_status='none' | [ ] | `group-tasks.ts:95-100` |
+| M4-04 | 验证 federation_task_index 索引 | `SELECT * FROM federation_task_index WHERE task_id=...;` → status='open' | [ ] | `group-tasks.ts:104-108`, `hub.ts:416-441` |
+| M4-05 | **能力校验拒绝：** 发任务 required_capabilities=`["unknown"]`（不在群契约 shared_capabilities 中） | 返回 400 "Capabilities not in group contract shared_capabilities: unknown" | [ ] | `group-tasks.ts:55-69` |
+| M4-06 | **非成员发任务：** Team C（未入群）发 | 返回 403 "Team is not a member of this group" | [ ] | `group-tasks.ts:46-53` |
+| M4-07 | 在 Tasks 看板观察新任务 | 出现在 Pending 列；卡片显示 title、priority badge | [ ] | `TaskBoard.tsx` 拉取所有任务 |
+| M4-08 | ⚠️ 群任务视觉标识 | **当前 TaskCard 不区分群任务/内部任务**（无 GROUP 标签或地球图标） | [ ] | 设计缺口，记录 |
+| M4-09 | 群任务列表 API | `GET /api/groups/:gid/tasks` 返回 task + authorization_status | [ ] | `group-tasks.ts:126-165` |
+
+### M4.2 跨团队 Claim（生成授权请求）
+
+| # | 步骤 | 预期结果 | 状态 | 关联代码 |
+|---|------|----------|------|----------|
+| M4-10 | Team B 用 agent-b1 跨团队 claim：`POST /api/tasks/:tid/group-claim` body=`{agent_id:AGENT_B1_ID, team_id:TEAM_B_ID}` | 返回 `{success:true, authorization_request_id, status:"pending_authorization", expires_at}` | [ ] | `group-tasks.ts:168-322` |
+| M4-11 | 验证 task 状态变更 | `SELECT status FROM tasks WHERE id=...;` → `pending_authorization` | [ ] | `group-tasks.ts:250` |
+| M4-12 | 验证 group_tasks.authorization_status | → `pending` | [ ] | `group-tasks.ts:253` |
+| M4-13 | 验证 authorization_requests 表 | 新行：requesting_team_id=TEAM_B_ID, requesting_agent_id=AGENT_B1_ID, expires_at=now+300 | [ ] | `group-tasks.ts:256-260` |
+| M4-14 | **能力不匹配 claim：** agent-a2 (labels=[]) claim required_capabilities=python 任务 | 返回 400 `error_code: "CAPABILITY_MISMATCH"` | [ ] | `group-tasks.ts:227-243` |
+| M4-15 | **同团队 claim 自己任务：** Team A claim 自己发的任务 | 返回 400 "Cannot claim your own team's task" | [ ] | `group-tasks.ts:218-221` |
+| M4-16 | **非群成员 claim：** Team C claim | 返回 403 "Team is not a member of this group" | [ ] | `group-tasks.ts:209-216` |
+| M4-17 | **重复 claim：** Team B 二次 claim 同任务 | 返回 400 "Task is not available for claiming" | [ ] | `group-tasks.ts:194-197` |
+| M4-18 | Tasks 看板观察 | 任务**仍在 Pending 列**（status=pending_authorization 不在 In Progress 范畴），但 TaskCard 状态 badge 应显示 "pending_authorization" 或自定义文案 | [ ] | `TaskBoard.tsx:99` 状态过滤；`TaskCard.tsx:31-39` statusConfig 无 `pending_authorization` |
+| M4-19 | ⚠️ TaskCard.statusConfig 缺 `pending_authorization` | 实际可能渲染为灰色 unknown 状态（默认 fallback） | [ ] | `TaskCard.tsx:31-39, 42` |
+
+---
+
+## H. 模块五：Authorizations 页面 — 闸门审批 (M5)
+
+### M5.1 待审批列表展示
+
+| # | 步骤 | 预期结果 | 状态 | 关联代码 |
+|---|------|----------|------|----------|
+| M5-01 | M4-10 后立即进入 Authorizations 页面（Team A 视角） | 列表显示 1 个卡片：title="群任务-1"，agent_name=agent-b1，team_id 缩写，倒计时 ~5:00 | [ ] | `AuthorizationsPage.tsx:64-99` |
+| M5-02 | 卡片字段完整性 | 显示：task_title、task_description（或 "No description"）、Agent: name(runtime)、Team: 截断 ID、倒计时、Approve / Reject 按钮 | [ ] | `AuthorizationsPage.tsx:69-96` |
+| M5-03 | 倒计时格式 | `m:ss`（如 `4:58`），逐秒递减 | [ ] | `AuthorizationsPage.tsx:51-57` |
+| M5-04 | 倒计时颜色：> 60s | 灰色 (`text-gray-400`) | [ ] | `AuthorizationsPage.tsx:75` |
+| M5-05 | **倒计时 ≤ 60s 变红：** SQL 把 `expires_at` 改为 `now+30` 后刷新 | 颜色变红 (`text-red-400`) | [ ] | `AuthorizationsPage.tsx:75` |
+| M5-06 | 自动刷新机制 | 保持页面打开 11 秒，观察 Network 出现第二次 `GET /pending` | [ ] | `AuthorizationsPage.tsx:29-31` 10s 间隔 |
+| M5-07 | ⚠️ 团队 ID 截断显示 | "Team:" 后只显示前 8 字符（L-10），不可见完整团队名 | [ ] | `AuthorizationsPage.tsx:81` |
+
+### M5.2 批准流程
+
+| # | 步骤 | 预期结果 | 状态 | 关联代码 |
+|---|------|----------|------|----------|
+| M5-08 | 点击 "Approve" 按钮 | `POST /api/authorizations/:id/approve`，返回 `{success:true, status:"approved"}` | [ ] | `authorizations.ts:43-106` |
+| M5-09 | 卡片消失 | 列表立即移除该卡片（fetchPending 重新拉取） | [ ] | `AuthorizationsPage.tsx:36-38` |
+| M5-10 | DB 验证 task 状态 | `SELECT status, assignee_id, claimed_at FROM tasks WHERE id=...;` → `claimed`, agent-b1, now | [ ] | `authorizations.ts:80-83` |
+| M5-11 | DB 验证 group_tasks | `authorization_status=approved, authorized_at=now` | [ ] | `authorizations.ts:86-89` |
+| M5-12 | DB 验证 authorization_requests | `status=approved, resolved_at=now` | [ ] | `authorizations.ts:92-95` |
+| M5-13 | Tasks 看板验证 | 该任务从 Pending 列移到 In Progress 列（status=claimed） | [ ] | `TaskBoard.tsx:101-106` |
+| M5-14 | TaskCard 显示 assignee | 显示 agent-b1 名称 | [ ] | `TaskCard.tsx:107-112` |
+
+### M5.3 拒绝流程
+
+| # | 步骤 | 预期结果 | 状态 | 关联代码 |
+|---|------|----------|------|----------|
+| M5-15 | 重新制造一个 pending 授权请求（重发任务+claim） | Authorizations 页面再次出现卡片 | [ ] | |
+| M5-16 | 点击 "Reject" | `POST /api/authorizations/:id/reject` 返回 `{success:true, status:"rejected"}` | [ ] | `authorizations.ts:109-159` |
+| M5-17 | DB 验证 task 状态 | `status=pending, assignee_id=NULL`（回池） | [ ] | `authorizations.ts:136` |
+| M5-18 | DB 验证 group_tasks | `authorization_status=rejected` | [ ] | `authorizations.ts:139-141` |
+| M5-19 | Tasks 看板 | 任务回到 Pending 列 | [ ] | |
+| M5-20 | 其他 Agent 重新 claim：Team B 用 agent-b1 再次 group-claim | 成功，再生成 pending_authorization | [ ] | |
+
+### M5.4 过期流程
+
+| # | 步骤 | 预期结果 | 状态 | 关联代码 |
+|---|------|----------|------|----------|
+| M5-21 | SQL 把待审批 expires_at 改为 `now-1` | — | [ ] | |
+| M5-22 | 等待 30 秒（authCheckInterval） | 后台 `checkExpiredAuthorizations()` 触发 | [ ] | `index.ts:199`, `authorizations.ts:163-191` |
+| M5-23 | DB 验证：authorization_requests | status=expired, resolved_at=now | [ ] | `authorizations.ts:181` |
+| M5-24 | DB 验证：group_tasks | authorization_status=expired | [ ] | `authorizations.ts:182` |
+| M5-25 | DB 验证：tasks | status=pending（回池） | [ ] | `authorizations.ts:183` |
+| M5-26 | 服务器日志 | `[auth] Authorization expired: {id} for task {tid}` | [ ] | `authorizations.ts:184` |
+| M5-27 | Authorizations 页面 | 该卡片在下一次自动刷新时消失 | [ ] | |
+| M5-28 | **手动批准已过期请求：** UI 还显示时点 Approve（争用） | 返回 400 "Authorization request has expired" | [ ] | `authorizations.ts:67-76` |
+
+### M5.5 自动授权（auto 模式）
+
+| # | 步骤 | 预期结果 | 状态 | 关联代码 |
+|---|------|----------|------|----------|
+| M5-29 | 把群契约改为 `authorization=auto, trust_threshold=0.5` | UI 或 API 保存 | [ ] | M2.5 已验证 |
+| M5-30 | 给 Team B 累计正信誉（先完成几个任务+review_approved） | `SELECT total_score FROM ... WHERE team_id=TEAM_B_ID;` ≥ 信誉阈值对应分数 | [ ] | `reputation.ts:checkThreshold` |
+| M5-31 | Team B claim 新任务 | 后端 auto-approve，返回 `{auto_approved: true, status:"claimed"}` | [ ] | `group-tasks.ts:281-307` |
+| M5-32 | Authorizations 页面 | **不**生成 pending 卡片（直接通过） | [ ] | |
+| M5-33 | DB 验证 authorization_requests | 新行 status=approved（已自动批准） | [ ] | `group-tasks.ts:294-297` |
+| M5-34 | **信誉不足时 fallback：** 把 Team B 信誉刷为 0，再 claim | 走 manual 流程，pending_authorization | [ ] | `group-tasks.ts:307` |
+
+---
+
+## I. 模块六：信誉分系统 (M6)（受限 L-04）
+
+### M6.1 信誉记录生成
+
+| # | 步骤 | 预期结果 | 状态 | 关联代码 |
+|---|------|----------|------|----------|
+| M6-01 | 完成一个跨团队群任务（agent-b1 claim → 完成 → review_approved） | reputation_records 新增一行：team_id=TEAM_B_ID, group_id, event_type=review_approved, score_delta>0 | [ ] | `reputation.ts:recordReputation` |
+| M6-02 | review_rejected 后果 | reputation_records 新增 score_delta<0 的行 | [ ] | `reviews.ts:63` |
+| M6-03 | task_completed 自动加分 | （若实现）completion 时调 recordReputation('task_completed', ...) | [ ] | 检查 `task-queue.ts` 是否调用 |
+| M6-04 | task_failed 自动减分 | （若实现）failure 时调 recordReputation('task_failed', ...) | [ ] | 检查 `task-queue.ts` 是否调用 |
+
+### M6.2 信誉查询 API
+
+| # | 步骤 | 预期结果 | 状态 | 关联代码 |
+|---|------|----------|------|----------|
+| M6-05 | `GET /api/groups/:gid/reputation` | 返回数组：每个团队 `{team_id, total_score, event_count, last_event_at}` | [ ] | `reputation.ts:7-38` |
+| M6-06 | `GET /api/groups/:gid/reputation/:tid` | 返回单团队信誉 + 默认值（无记录时返回 0） | [ ] | `reputation.ts:41-70` |
+| M6-07 | 不存在的群 | 返回 404 "Group not found" | [ ] | `reputation.ts:14-17` |
+
+### M6.3 ReputationBadge 渲染（受限 L-04）
+
+| # | 步骤 | 预期结果 | 状态 | 关联代码 |
+|---|------|----------|------|----------|
+| M6-08 | ⏭️ UI 渲染验证 | 当前**没有任何页面引用 ReputationBadge**（L-04） | [ ] | grep 仅在测试中 |
+| M6-09 | 单元测试覆盖（已通过） | `npm test` / packages/web vitest GroupsPage.test.tsx → TC-G026-001 信誉徽章颜色映射 | [ ] | 自动化测试已 |
+| M6-10 | **建议补丁：** 在群成员列表/Authorizations 页面添加 ReputationBadge | 记录到下一迭代 | [ ] | 缺口待办 |
+
+---
+
+## J. 模块七：Review 工作流 (M7)（受限 L-05）
+
+| # | 步骤 | 预期结果 | 状态 | 关联代码 |
+|---|------|----------|------|----------|
+| M7-01 | ⏭️ UI 入口 | 无 Review 页面/按钮（L-05） | [ ] | L-05 |
+| M7-02 | API 提交 review approved：`POST /api/tasks/:tid/review` body=`{decision:"approved", reviewer_id:"user-default"}` | 返回 `{success:true, decision:"approved"}`；reputation_records 增加 review_approved | [ ] | `reviews.ts:48-58` |
+| M7-03 | task 状态保持 completed | 不回退 | [ ] | |
+| M7-04 | API 提交 review rejected | task 状态回退为 pending，assignee_id=NULL；group_tasks.authorization_status=none；reputation_records 增加 review_rejected (负分) | [ ] | `reviews.ts:60-73` |
+| M7-05 | Tasks 看板验证 rejected 后 | 任务回到 Pending 列 | [ ] | |
+| M7-06 | **未完成任务 review：** 对 status=pending 的任务调 review | 返回 400 "Task must be completed before review" | [ ] | `reviews.ts:32-34` |
+| M7-07 | **非群任务 review：** 对内部任务调 review | 返回 400 "Task is not a group task" | [ ] | `reviews.ts:36-44` |
+| M7-08 | **非法 decision：** body=`{decision:"unknown"}` | 返回 400 "decision must be approved or rejected" | [ ] | `reviews.ts:12-14` |
+
+---
+
+## K. 模块八：联邦网关 UI 联动 (M8)
+
+联邦底层协议已在 `docs/federation-e2e-manual-test-guide.md` 单独验证。本节只校核 **Web UI 是否如实反映联邦状态**。
+
+### M8.1 Federation Hub WebSocket 连接
+
+| # | 步骤 | 预期结果 | 状态 | 关联代码 |
+|---|------|----------|------|----------|
+| M8-01 | Hub 启动后日志 | `[server] WebSocket endpoints: /ws, /daemon/connect, /federation` | [ ] | `index.ts:256` |
+| M8-02 | Runner 连接（Team B 端）：设置 `FEDERATION_URL`、`FEDERATION_INVITE_CODE`、`FEDERATION_TEAM_ID` 启动第二个 server | Hub 日志 `[federation-hub] New Runner connection` + `Peer registered: TEAM_B_ID` | [ ] | `hub.ts:280, 107` |
+| M8-03 | DB 验证 federation_peers | 新行：team_id=TEAM_B_ID, status=connected, last_heartbeat | [ ] | `hub.ts:80-88` |
+| M8-04 | ⏭️ UI 联邦状态面板 | 当前**无 UI 展示**（L-08）；通过 SQL 验证 | [ ] | L-08 |
+
+### M8.2 Federation Task Index（poll 触发）
+
+| # | 步骤 | 预期结果 | 状态 | 关联代码 |
+|---|------|----------|------|----------|
+| M8-05 | M4-04 已发布的群任务 | federation_task_index 中 status=open | [ ] | |
+| M8-06 | Runner poll：`GET /api/federation/poll?team_id=TEAM_B_ID&labels=python` | 返回 tasks 数组，含该任务 taskId 和 requiredLabels | [ ] | `hub.ts:308-372` |
+| M8-07 | 标签不匹配过滤：labels=java | 返回空列表 | [ ] | `hub.ts:347-348` |
+| M8-08 | 未注册团队 poll | 返回 403 "Team not registered with this hub" | [ ] | `hub.ts:316-318` |
+
+### M8.3 出入群广播
+
+| # | 步骤 | 预期结果 | 状态 | 关联代码 |
+|---|------|----------|------|----------|
+| M8-09 | Runner 注册后 | Hub 广播 `federation.member.joined` 给同 group 其他 peers | [ ] | `hub.ts:101-105` |
+| M8-10 | Runner 主动断开 (process kill) | Hub 检测 close → broadcast `federation.member.left` | [ ] | `hub.ts:127-130, 287-294` |
+| M8-11 | 心跳超时（120s）触发 | Hub 自动 disconnect peer，状态更新为 disconnected | [ ] | `hub.ts:46-57` |
+| M8-12 | 已 claim 但未完成的联邦任务回收 | `federation_task_index.status=claimed → open`，`claimed_by_team_id` 重置 | [ ] | `hub.ts:133-138` |
+
+### M8.4 Federation Agent Wake (TODO 标记)
+
+| # | 步骤 | 预期结果 | 状态 | 关联代码 |
+|---|------|----------|------|----------|
+| M8-13 | 跨团队批准后远程 Agent 唤醒 | Hub 调用 `wakeFederationAgent` 发送 `federation.agent.wake` 给 Runner | [ ] | `hub.ts:391-410` |
+| M8-14 | ⚠️ **已知 TODO：** `handleClaim` 中只 console.log 未真正路由到源团队 | 检查 `hub.ts:271-274` 注释 "TODO: Route claim to source team server (F006/F007)" | [ ] | 待 F006/F007 实现 |
+| M8-15 | ⚠️ **已知 TODO：** `POST /api/federation/claim` 返回 mock | 检查 `hub.ts:374-384` 注释 | [ ] | 待 F006/F007 实现 |
+
+---
+
+## L. 模块九：Tasks 页面与群任务交互 (M9)
+
+### M9.1 群任务在 TaskBoard 的展示
+
+| # | 步骤 | 预期结果 | 状态 | 关联代码 |
+|---|------|----------|------|----------|
+| M9-01 | 进入 Tasks 页面，混合内部任务 + 群任务 | 看板 3 列正常显示，所有任务（含群任务）混排 | [ ] | `TaskBoard.tsx:48-57` |
+| M9-02 | 群任务卡片 vs 内部任务卡片视觉差异 | ⚠️ **当前无视觉区分**（无 GROUP/地球标识） | [ ] | 设计缺口 |
+| M9-03 | 任务详情弹窗（点击群任务卡片） | 显示完整 ID、Creator、Assignee（解析为名称） | [ ] | `TaskDetailModal.tsx:274-281` |
+| M9-04 | Creator/Assignee 名称解析 | 通过 `/api/resolve-names` 返回真实名（user-default、agent-b1） | [ ] | `TaskBoard.tsx:35-46` |
+| M9-05 | 群任务的 source_team_id 字段 | ⚠️ **未在 TaskCard 渲染来源团队**（设计缺口） | [ ] | |
+
+### M9.2 状态流转可视化
+
+| # | 步骤 | 预期结果 | 状态 | 关联代码 |
+|---|------|----------|------|----------|
+| M9-06 | pending → claimed | 卡片从 Pending 列移到 In Progress 列 | [ ] | `TaskBoard.tsx:99-106` |
+| M9-07 | claimed → running | 仍在 In Progress 列；status badge 颜色变浅蓝 | [ ] | `TaskCard.tsx:31-39` |
+| M9-08 | running → completed | 移到 Completed 列；status badge 绿色 "Done" | [ ] | |
+| M9-09 | completed → review (rejected) → pending | 回到 Pending 列 | [ ] | M7-04 |
+| M9-10 | pending_authorization 状态 | ⚠️ **TaskCard.statusConfig 缺该状态映射**（默认 fallback 为灰色 unknown） | [ ] | `TaskCard.tsx:42` |
+| M9-11 | TaskBoard 分栏逻辑 | pending_authorization 应在 Pending 列（值为 'pending'）还是其他列？检查 `TaskBoard.tsx:99` | [ ] | 当前逻辑：'pending' 字面匹配 → pending_authorization 不在任何栏 |
+| M9-12 | ⚠️ **缺口：pending_authorization 不显示在看板任何列** | 用户在 UI 看不到该任务，需通过 Authorizations 页面操作 | [ ] | 实际行为待验证 |
+
+### M9.3 Force Override 操作
+
+| # | 步骤 | 预期结果 | 状态 | 关联代码 |
+|---|------|----------|------|----------|
+| M9-13 | 任务详情弹窗中 Force Complete 按钮 | 在 status ≠ completed/failed 时可见 | [ ] | `TaskDetailModal.tsx:347-355` |
+| M9-14 | 点击 Force Complete | `POST /api/tasks/:tid/force-complete`，状态变 completed | [ ] | `TaskDetailModal.tsx:184-189` |
+| M9-15 | 点击 Force Fail | 状态变 failed | [ ] | `TaskDetailModal.tsx:193-199` |
+
+### M9.4 协作模式与子任务（v0.1.0 已验证，本版回归）
+
+| # | 步骤 | 预期结果 | 状态 | 关联代码 |
+|---|------|----------|------|----------|
+| M9-16 | 创建 collaborate 模式群任务 | 走完整协作流程，子任务执行 → verify → completed | [ ] | §8 已验证，本次确认未回归 |
+| M9-17 | 子任务树展示 | 详情中显示 "Subtasks (n/m)" 进度 | [ ] | `TaskDetailModal.tsx:368-454` |
+| M9-18 | 子任务详情弹窗（递归） | 点 "detail" 链接展开子任务详情 | [ ] | `TaskDetailModal.tsx:493-501` |
+
+---
+
+## M. 模块十：跨团队聊天（轻量验证）(M10)
+
+| # | 步骤 | 预期结果 | 状态 | 关联代码 |
+|---|------|----------|------|----------|
+| M10-01 | 群成员是否在同一聊天频道 | ⚠️ 当前**没有自动创建群聊频道**的逻辑（设计缺口） | [ ] | 检查 `groups.ts` 创建群时无 channels 创建 |
+| M10-02 | 手动把 agent-b1 加入 #general 频道 | 通过 `POST /api/channels/:id/members` 或 daemon 自动加入 | [ ] | |
+| M10-03 | Team B 用户访问 Chat 页面 | MemberList 显示 agent-b1（机器人图标） | [ ] | `MemberList.tsx` |
+| M10-04 | @mention agent-b1 | 触发 daemon 自动回复 | [ ] | v0.1.0 已验证 |
+| M10-05 | 跨团队消息发送 | 消息发送者名称解析正确 | [ ] | v0.1.0 已验证 |
+
+---
+
+## N. 验证结果汇总
+
+| 模块 | 总项数 | 通过 ✅ | 失败 ❌ | 跳过 ⏭️ | 备注 |
+|------|--------|---------|---------|---------|------|
+| C 环境检查 | 10 | | | | |
+| D 测试数据准备 | 8 | | | | |
+| M1 导航与路由 | 15 | | | | |
+| M2 Groups 群生命周期 | 46 | | | | |
+| M3 Agents 标签 | 15 | | | | |
+| M4 群任务发布与 Claim | 19 | | | | |
+| M5 Authorizations 闸门 | 34 | | | | |
+| M6 信誉分 | 10 | | | | |
+| M7 Review 工作流 | 8 | | | | |
+| M8 联邦网关 UI 联动 | 15 | | | | |
+| M9 Tasks 页面交互 | 18 | | | | |
+| M10 跨团队聊天 | 5 | | | | |
+| **总计** | **203** | | | | |
+
+---
+
+## O. 已识别的 UI 缺口（建议下一迭代修复）
+
+按严重度排序，源自验证过程。**仅在验证通过、并完整记录后**才能合并到 backlog：
+
+| 编号 | 缺口描述 | 严重度 | 影响范围 |
+|------|----------|--------|----------|
+| GAP-01 | Add Agent 模态框无 labels 输入 | 高 | 联邦标签匹配链路完全依赖 SQL 手工干预 |
+| GAP-02 | TaskCard 不区分群任务/内部任务 | 中 | 跨团队任务来源不可见 |
+| GAP-03 | TaskCard.statusConfig 缺 `pending_authorization` 映射 | 中 | 该状态任务在看板无法展示 |
+| GAP-04 | TaskBoard 不显示 pending_authorization 任务 | 中 | 用户在 Tasks 页看不到待审批任务 |
+| GAP-05 | GroupsPage 无 Leave / Delete 按钮 | 中 | 必须用 API 才能退群/解散 |
+| GAP-06 | ReputationBadge 未在任何页面渲染 | 中 | 信誉分系统对用户不可见 |
+| GAP-07 | 无 Review 工作流 UI | 中 | 评审必须用 API |
+| GAP-08 | Authorizations 页 team_id 截断显示 | 低 | 团队识别困难 |
+| GAP-09 | GroupsPage shared_capabilities 无 UI 编辑入口 | 低 | 必须 API 修改契约后才能发任务 |
+| GAP-10 | 无 Federation Peers 状态面板 | 低 | 联邦连接状态不可观测 |
+| GAP-11 | Settings 页 version 硬编码 0.1.0 | 低 | 误导性 |
+| GAP-12 | hub.ts handleClaim / POST claim 标记 TODO | 中 | 联邦端到端 claim 路由未完整实现 |
+| GAP-13 | groups.ts leave 注释 TODO："Reset claimed tasks back to pending pool" | 低 | 退群后任务清理可能不完全 |
+| GAP-14 | 多处 WebSocket 通知 TODO（authorization.requested/approved 等） | 中 | 实时通知缺失，靠轮询 |
+
+---
+
+## P. 验证签名
+
+- **验证开始日期：** ___________
+- **验证完成日期：** ___________
+- **总耗时：** ___________
 - **验证人：** ___________
-- **结论：** □ 全部通过  □ 有条件通过（备注：________________）  □ 不通过（需修复后重验）
-- **已知问题（如有）：**
-  - Agents 页面 "Add Agent" 模态框当前缺少 `labels` 输入字段，创建后需通过 API 补充 labels，方可参与联邦标签匹配。
+- **审核人：** ___________
+
+### 决策
+- ⬜ **GO** — 全部验证通过，无阻塞缺陷，可发布
+- ⬜ **CONDITIONAL GO** — 部分跳过/缺陷已记录但不阻塞，附补丁计划
+- ⬜ **NO-GO** — 存在阻塞缺陷，需修复后重新验证
+
+### 补充说明
+（在此填写验证过程中发现的非缺口性问题、修复 PR 链接、回归测试覆盖建议等）
+
+---
+
+## Q. 验证时间线
+
+| 时间 | 模块 | 操作 | 结果 |
+|------|------|------|------|
+| | C 环境检查 | | |
+| | D 测试数据准备 | | |
+| | M1 导航 | | |
+| | M2 Groups | | |
+| | ... | | |
 

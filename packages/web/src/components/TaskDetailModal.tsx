@@ -13,6 +13,10 @@ interface Task {
   assigneeId?: string;
   parentTaskId?: string;
   depth?: number;
+  isGroupTask?: boolean;
+  sourceTeamId?: string;
+  groupId?: string;
+  authorizationStatus?: 'none' | 'pending' | 'approved' | 'rejected' | 'expired';
   output?: string;
   timeoutSeconds?: number;
   maxRetries: number;
@@ -42,6 +46,7 @@ interface TaskDetailModalProps {
 
 const statusColors: Record<string, string> = {
   pending: 'bg-yellow-500',
+  pending_authorization: 'bg-amber-500',
   claimed: 'bg-blue-500',
   running: 'bg-blue-400',
   decomposing: 'bg-purple-500',
@@ -52,6 +57,7 @@ const statusColors: Record<string, string> = {
 
 const statusIcons: Record<string, string> = {
   pending: '⏳',
+  pending_authorization: '🟡',
   claimed: '🔵',
   running: '🔄',
   decomposing: '🧩',
@@ -79,6 +85,7 @@ export function TaskDetailModal({ taskId, onClose, onUpdated, names }: TaskDetai
   const [taskTree, setTaskTree] = useState<TaskTree | null>(null);
   const [expandedTasks, setExpandedTasks] = useState<Set<string>>(new Set());
   const [selectedSubtask, setSelectedSubtask] = useState<string | null>(null);
+  const [reviewResult, setReviewResult] = useState<string | null>(null);
 
   // Merge prop names with locally resolved names
   const allNames = { ...names, ...resolvedNames };
@@ -108,8 +115,13 @@ export function TaskDetailModal({ taskId, onClose, onUpdated, names }: TaskDetai
           setExpandedTasks(new Set([treeData.task.id, ...treeData.children.map((c: Task) => c.id)]));
         }
 
-        // Collect IDs from timeline for name resolution
+        // Collect IDs from task metadata and timeline for name resolution
         const extraIds = new Set<string>();
+        const currentTask = timelineData.task as Task | undefined;
+        if (currentTask?.creatorId) extraIds.add(currentTask.creatorId);
+        if (currentTask?.assigneeId) extraIds.add(currentTask.assigneeId);
+        if (currentTask?.sourceTeamId) extraIds.add(currentTask.sourceTeamId);
+        if (currentTask?.groupId) extraIds.add(currentTask.groupId);
         for (const entry of tl) {
           if (entry.type === 'message' && entry.data?.senderId) {
             extraIds.add(entry.data.senderId);
@@ -122,6 +134,8 @@ export function TaskDetailModal({ taskId, onClose, onUpdated, names }: TaskDetai
           for (const child of treeData.children) {
             if (child.assigneeId) extraIds.add(child.assigneeId);
             if (child.creatorId) extraIds.add(child.creatorId);
+            if (child.sourceTeamId) extraIds.add(child.sourceTeamId);
+            if (child.groupId) extraIds.add(child.groupId);
           }
         }
         if (extraIds.size > 0) {
@@ -198,6 +212,20 @@ export function TaskDetailModal({ taskId, onClose, onUpdated, names }: TaskDetai
     }
   };
 
+  const handleReview = async (decision: 'approved' | 'rejected') => {
+    if (!taskId) return;
+    const reviewerId = localStorage.getItem('acb-humanId') || 'user-default';
+    const result = await apiCall(`/api/tasks/${taskId}/review`, 'POST', {
+      decision,
+      reviewer_id: reviewerId,
+    });
+    if (result) {
+      setReviewResult(decision);
+      onUpdated();
+      refreshDetail();
+    }
+  };
+
   const refreshDetail = async () => {
     if (!taskId) return;
     const [timelineData, treeData] = await Promise.all([
@@ -224,7 +252,7 @@ export function TaskDetailModal({ taskId, onClose, onUpdated, names }: TaskDetai
     // For task events, resolve known ID fields
     const resolved: Record<string, unknown> = {};
     for (const [k, v] of Object.entries(entry.data)) {
-      if ((k === 'agentId' || k === 'claimedBy' || k === 'creatorId' || k === 'assigneeId') && typeof v === 'string') {
+      if ((k === 'agentId' || k === 'claimedBy' || k === 'creatorId' || k === 'assigneeId' || k === 'sourceTeamId' || k === 'groupId') && typeof v === 'string') {
         resolved[k] = allNames[v] || v;
       } else {
         resolved[k] = v;
@@ -261,6 +289,16 @@ export function TaskDetailModal({ taskId, onClose, onUpdated, names }: TaskDetai
                 <span className="text-xs px-2 py-1 rounded bg-purple-600 text-white">
                   {task.mode}
                 </span>
+                {(task.isGroupTask || task.groupId || task.sourceTeamId) && (
+                  <span className="text-xs px-2 py-1 rounded bg-indigo-600 text-white">
+                    Group
+                  </span>
+                )}
+                {task.authorizationStatus && task.authorizationStatus !== 'none' && (
+                  <span className="text-xs px-2 py-1 rounded bg-amber-700 text-white">
+                    Auth: {task.authorizationStatus}
+                  </span>
+                )}
                 {task.tags?.map(tag => (
                   <span key={tag} className="text-xs px-2 py-1 rounded bg-gray-600 text-gray-300">
                     {tag}
@@ -275,6 +313,9 @@ export function TaskDetailModal({ taskId, onClose, onUpdated, names }: TaskDetai
                 <p>ID: {task.id}</p>
                 <p>Creator: {allNames[task.creatorId] || task.creatorId}</p>
                 {task.assigneeId && <p>Assignee: {allNames[task.assigneeId] || task.assigneeId}</p>}
+                {task.groupId && <p>Group: {allNames[task.groupId] || task.groupId}</p>}
+                {task.sourceTeamId && <p>Source Team: {allNames[task.sourceTeamId] || task.sourceTeamId}</p>}
+                {task.authorizationStatus && <p>Authorization: {task.authorizationStatus}</p>}
                 <p>Created: {formatTime(task.createdAt)}</p>
                 {task.claimedAt && <p>Claimed: {formatTime(task.claimedAt)}</p>}
                 {task.completedAt && <p>Completed: {formatTime(task.completedAt)}</p>}
@@ -364,6 +405,41 @@ export function TaskDetailModal({ taskId, onClose, onUpdated, names }: TaskDetai
                 </div>
               )}
             </div>
+
+            {/* Review actions for completed group tasks */}
+            {task.status === 'completed' && (task.isGroupTask || task.groupId) && (
+              <div className="bg-gray-700 rounded-lg p-4 mb-4 border border-purple-700/60">
+                <h4 className="text-sm font-semibold text-purple-200 mb-2">Review</h4>
+                <p className="text-sm text-gray-300 mb-3">
+                  Review this completed group task output and decide whether to approve it or return it to the task pool.
+                </p>
+                {task.output && (
+                  <div className="mb-3 p-2 bg-gray-600 rounded text-sm text-gray-200">
+                    <span className="text-xs text-gray-400 block mb-1">Output:</span>
+                    {task.output}
+                  </div>
+                )}
+                {reviewResult && (
+                  <div className="mb-3 text-sm text-green-300">Review {reviewResult}.</div>
+                )}
+                <div className="flex gap-2">
+                  <button
+                    onClick={() => handleReview('approved')}
+                    disabled={loading}
+                    className="px-4 py-2 bg-green-600 text-white rounded-lg text-sm hover:bg-green-700 disabled:opacity-50 transition-colors"
+                  >
+                    Approve
+                  </button>
+                  <button
+                    onClick={() => handleReview('rejected')}
+                    disabled={loading}
+                    className="px-4 py-2 bg-red-600 text-white rounded-lg text-sm hover:bg-red-700 disabled:opacity-50 transition-colors"
+                  >
+                    Reject
+                  </button>
+                </div>
+              </div>
+            )}
 
             {/* Task Tree (for collaborate mode) */}
             {taskTree && taskTree.children.length > 0 && (

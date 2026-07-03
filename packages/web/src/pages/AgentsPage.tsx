@@ -14,13 +14,14 @@ interface Agent {
   runtime: string;
   status: string;
   currentTaskId?: string;
+  labels?: string[];
 }
 
 export function AgentsPage() {
   const [machines, setMachines] = useState<Machine[]>([]);
   const [agents, setAgents] = useState<Agent[]>([]);
   const [showAddAgent, setShowAddAgent] = useState(false);
-  const [newAgent, setNewAgent] = useState({ name: '', runtime: 'claude', machineId: '' });
+  const [newAgent, setNewAgent] = useState({ name: '', runtime: 'claude', machineId: '', labelsText: '' });
 
   useEffect(() => {
     Promise.all([
@@ -36,16 +37,22 @@ export function AgentsPage() {
     if (!newAgent.name || !newAgent.machineId) return;
 
     try {
+      const labels = [...new Set(newAgent.labelsText.split(',').map(label => label.trim()).filter(Boolean))];
       const res = await fetch('/api/agents', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(newAgent),
+        body: JSON.stringify({
+          machineId: newAgent.machineId,
+          name: newAgent.name,
+          runtime: newAgent.runtime,
+          labels,
+        }),
       });
       if (res.ok) {
         const agent = await res.json();
         setAgents(prev => [...prev, agent]);
         setShowAddAgent(false);
-        setNewAgent({ name: '', runtime: 'claude', machineId: '' });
+        setNewAgent({ name: '', runtime: 'claude', machineId: '', labelsText: '' });
       }
     } catch (err) {
       console.error('Failed to add agent:', err);
@@ -130,6 +137,11 @@ export function AgentsPage() {
                         <span className={`w-2 h-2 rounded-full ${statusColor(agent.status)}`} />
                         <span className="font-medium">{agent.name}</span>
                         <span className="text-xs bg-gray-600 px-2 py-1 rounded">{agent.runtime}</span>
+                        {agent.labels?.length ? agent.labels.map(label => (
+                          <span key={label} className="text-xs bg-blue-900/60 text-blue-200 px-2 py-1 rounded">{label}</span>
+                        )) : (
+                          <span className="text-xs text-gray-500">No labels</span>
+                        )}
                       </div>
                       <div className="flex items-center space-x-2">
                         {agent.currentTaskId && (
@@ -158,8 +170,9 @@ export function AgentsPage() {
             <h3 className="text-lg font-semibold mb-4">Add Agent</h3>
             <div className="space-y-4">
               <div>
-                <label className="block text-sm text-gray-400 mb-1">Machine</label>
+                <label htmlFor="agent-machine" className="block text-sm text-gray-400 mb-1">Machine</label>
                 <select
+                  id="agent-machine"
                   value={newAgent.machineId}
                   onChange={(e) => setNewAgent(prev => ({ ...prev, machineId: e.target.value }))}
                   className="w-full bg-gray-700 text-white rounded-lg px-4 py-2"
@@ -171,8 +184,9 @@ export function AgentsPage() {
                 </select>
               </div>
               <div>
-                <label className="block text-sm text-gray-400 mb-1">Name</label>
+                <label htmlFor="agent-name" className="block text-sm text-gray-400 mb-1">Name</label>
                 <input
+                  id="agent-name"
                   type="text"
                   value={newAgent.name}
                   onChange={(e) => setNewAgent(prev => ({ ...prev, name: e.target.value }))}
@@ -181,8 +195,9 @@ export function AgentsPage() {
                 />
               </div>
               <div>
-                <label className="block text-sm text-gray-400 mb-1">Runtime</label>
+                <label htmlFor="agent-runtime" className="block text-sm text-gray-400 mb-1">Runtime</label>
                 <select
+                  id="agent-runtime"
                   value={newAgent.runtime}
                   onChange={(e) => setNewAgent(prev => ({ ...prev, runtime: e.target.value }))}
                   className="w-full bg-gray-700 text-white rounded-lg px-4 py-2"
@@ -193,6 +208,18 @@ export function AgentsPage() {
                   <option value="hermes">Hermes</option>
                 </select>
               </div>
+              <div>
+                <label htmlFor="agent-labels" className="block text-sm text-gray-400 mb-1">Labels</label>
+                <input
+                  id="agent-labels"
+                  type="text"
+                  value={newAgent.labelsText}
+                  onChange={(e) => setNewAgent(prev => ({ ...prev, labelsText: e.target.value }))}
+                  className="w-full bg-gray-700 text-white rounded-lg px-4 py-2"
+                  placeholder="python, review"
+                />
+                <p className="text-xs text-gray-500 mt-1">Comma-separated labels used for federation routing.</p>
+              </div>
               <div className="flex space-x-3 pt-2">
                 <button
                   onClick={handleAddAgent}
@@ -201,7 +228,10 @@ export function AgentsPage() {
                   Add
                 </button>
                 <button
-                  onClick={() => setShowAddAgent(false)}
+                  onClick={() => {
+                    setShowAddAgent(false);
+                    setNewAgent({ name: '', runtime: 'claude', machineId: '', labelsText: '' });
+                  }}
                   className="flex-1 bg-gray-700 text-white rounded-lg py-2 hover:bg-gray-600"
                 >
                   Cancel

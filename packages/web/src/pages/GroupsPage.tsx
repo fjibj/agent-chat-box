@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
+import { ReputationBadge } from '../components/ReputationBadge';
 
 interface Group {
   id: string;
@@ -28,6 +29,7 @@ export function GroupsPage() {
   const [showCreate, setShowCreate] = useState(false);
   const [newGroupName, setNewGroupName] = useState('');
   const [newGroupDesc, setNewGroupDesc] = useState('');
+  const [reputation, setReputation] = useState<Record<string, number>>({});
   const [inviteCode, setInviteCode] = useState('');
   const [joinCode, setJoinCode] = useState('');
   const [teamId] = useState('team-default'); // Use default team for MVP
@@ -50,6 +52,12 @@ export function GroupsPage() {
       .then(r => r.json())
       .then(data => setContract(data.contract))
       .catch(console.error);
+    fetch(`/api/groups/${selectedGroup.id}/reputation`)
+      .then(r => r.json())
+      .then((rows: Array<{ team_id: string; total_score: number }>) => {
+        setReputation(Object.fromEntries(rows.map(row => [row.team_id, row.total_score])));
+      })
+      .catch(() => setReputation({}));
   }, [selectedGroup]);
 
   const createGroup = () => {
@@ -107,6 +115,32 @@ export function GroupsPage() {
       .then(r => {
         if (!r.ok) throw new Error('Failed to update contract');
         setError('');
+      })
+      .catch(err => setError(err.message));
+  };
+
+  const leaveGroup = () => {
+    if (!selectedGroup) return;
+    fetch(`/api/groups/${selectedGroup.id}/leave`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ team_id: teamId }),
+    })
+      .then(r => {
+        if (!r.ok) throw new Error('Failed to leave group');
+        setSelectedGroup(null);
+        fetchGroups();
+      })
+      .catch(err => setError(err.message));
+  };
+
+  const deleteGroup = () => {
+    if (!selectedGroup) return;
+    fetch(`/api/groups/${selectedGroup.id}`, { method: 'DELETE' })
+      .then(r => {
+        if (!r.ok) throw new Error('Failed to delete group');
+        setSelectedGroup(null);
+        fetchGroups();
       })
       .catch(err => setError(err.message));
   };
@@ -182,6 +216,22 @@ export function GroupsPage() {
                 >
                   Invite Code
                 </button>
+                {selectedGroup.members?.some(m => m.team_id === teamId && m.role !== 'owner') && (
+                  <button
+                    onClick={leaveGroup}
+                    className="px-4 py-2 bg-red-700 rounded-lg hover:bg-red-600 text-sm"
+                  >
+                    Leave Group
+                  </button>
+                )}
+                {selectedGroup.owner_team_id === teamId && (
+                  <button
+                    onClick={deleteGroup}
+                    className="px-4 py-2 bg-red-900 rounded-lg hover:bg-red-800 text-sm"
+                  >
+                    Delete Group
+                  </button>
+                )}
               </div>
             </div>
 
@@ -198,7 +248,10 @@ export function GroupsPage() {
                 {selectedGroup.members?.map(m => (
                   <div key={m.team_id} className="px-4 py-3 border-b border-gray-700 last:border-0 flex items-center justify-between">
                     <span>{m.team_name}</span>
-                    <span className="text-xs px-2 py-1 bg-gray-700 rounded">{m.role}</span>
+                    <div className="flex items-center gap-2">
+                      <ReputationBadge score={reputation[m.team_id] ?? 0} />
+                      <span className="text-xs px-2 py-1 bg-gray-700 rounded">{m.role}</span>
+                    </div>
                   </div>
                 )) || <div className="px-4 py-3 text-gray-500">No members</div>}
               </div>
@@ -208,6 +261,19 @@ export function GroupsPage() {
             <div>
               <h3 className="text-lg font-bold mb-3">Contract</h3>
               <div className="bg-gray-800 rounded-lg border border-gray-700 p-4 space-y-4">
+                <div>
+                  <label className="text-sm text-gray-400 block mb-1">Shared Capabilities</label>
+                  <input
+                    type="text"
+                    value={(contract?.shared_capabilities || []).join(', ')}
+                    onChange={e => setContract(prev => ({
+                      ...prev!,
+                      shared_capabilities: [...new Set(e.target.value.split(',').map(cap => cap.trim()).filter(Boolean))],
+                    }))}
+                    placeholder="code, review, test"
+                    className="w-full bg-gray-700 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  />
+                </div>
                 <div>
                   <label className="text-sm text-gray-400 block mb-1">Authorization Mode</label>
                   <select
@@ -241,7 +307,24 @@ export function GroupsPage() {
                     className="w-full bg-gray-700 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
                   />
                 </div>
+                <div>
+                  <label className="text-sm text-gray-400 block mb-1">Max Retries Per Task</label>
+                  <input
+                    type="number"
+                    value={contract?.resource_quota?.max_retry_per_task || 3}
+                    onChange={e => setContract(prev => ({ ...prev!, resource_quota: { ...prev?.resource_quota, max_retry_per_task: parseInt(e.target.value) } }))}
+                    className="w-full bg-gray-700 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  />
+                </div>
                 <div className="flex gap-4">
+                  <label className="flex items-center gap-2 text-sm">
+                    <input
+                      type="checkbox"
+                      checked={contract?.visibility?.task_input !== false}
+                      onChange={e => setContract(prev => ({ ...prev!, visibility: { ...prev?.visibility, task_input: e.target.checked } }))}
+                    />
+                    Show task input
+                  </label>
                   <label className="flex items-center gap-2 text-sm">
                     <input
                       type="checkbox"

@@ -109,6 +109,7 @@ describe('G023: Group Management Page', () => {
         },
       ], // initial groups
       { contract: { authorization: 'manual', trust_threshold: 0.5 } }, // GET contract
+      [], // GET reputation
       { invite_code: 'XYZ789' }, // POST invite
     ]);
     const user = userEvent.setup();
@@ -144,6 +145,7 @@ describe('G023: Group Management Page', () => {
         },
       ], // initial groups
       { contract: { authorization: 'manual', trust_threshold: 0.5 } }, // GET contract
+      [], // GET reputation
       { success: true }, // PATCH contract
     ]);
     const user = userEvent.setup();
@@ -221,10 +223,13 @@ describe('G026: Reputation Display', () => {
     const { container: mid } = render(<ReputationBadge score={2} />);
     expect(mid.querySelector('span')?.className).toContain('bg-yellow-600');
 
+    const { container: four } = render(<ReputationBadge score={4} />);
+    expect(four.querySelector('span')?.className).toContain('bg-yellow-600');
+
     const { container: low } = render(<ReputationBadge score={-1} />);
     expect(low.querySelector('span')?.className).toContain('bg-red-600');
 
     const { container: neutral } = render(<ReputationBadge score={0} />);
-    expect(neutral.querySelector('span')?.className).toContain('bg-gray-600');
+    expect(neutral.querySelector('span')?.className).toContain('bg-red-600');
   });
 });

@@ -304,6 +304,47 @@ export function handleFederationConnection(ws: WebSocket): void {
 // ---------------------------------------------------------------------------
 
 export async function registerFederationHubRoutes(app: FastifyInstance): Promise<void> {
+  // GET /api/federation/peers — list registered federation peers
+  app.get('/api/federation/peers', async (request: FastifyRequest) => {
+    const query = request.query as { group_id?: string };
+    const db = getDatabase();
+    let sql = `
+      SELECT fp.*, t.name as team_name, g.name as group_name
+      FROM federation_peers fp
+      LEFT JOIN teams t ON fp.team_id = t.id
+      LEFT JOIN groups g ON fp.group_id = g.id
+    `;
+    const params: unknown[] = [];
+    if (query.group_id) {
+      sql += ' WHERE fp.group_id = ?';
+      params.push(query.group_id);
+    }
+    sql += ' ORDER BY fp.connected_at DESC';
+
+    const stmt = db.prepare(sql);
+    if (params.length > 0) stmt.bind(params);
+    const peers: Array<Record<string, unknown>> = [];
+    while (stmt.step()) {
+      const row = stmt.getAsObject() as Record<string, unknown>;
+      peers.push({
+        id: row.id,
+        groupId: row.group_id,
+        groupName: row.group_name,
+        teamId: row.team_id,
+        teamName: row.team_name,
+        hubUrl: row.hub_url,
+        status: row.status,
+        labels: row.labels ? JSON.parse(row.labels as string) : [],
+        roleCard: row.role_card ? JSON.parse(row.role_card as string) : null,
+        lastHeartbeat: row.last_heartbeat,
+        connectedAt: row.connected_at,
+        disconnectedAt: row.disconnected_at,
+      });
+    }
+    stmt.free();
+    return { peers };
+  });
+
   // GET /api/federation/poll — Runner pulls available tasks
   app.get('/api/federation/poll', async (request: FastifyRequest, reply: FastifyReply) => {
     const query = request.query as { team_id?: string; labels?: string };
@@ -378,9 +419,66 @@ export async function registerFederationHubRoutes(app: FastifyInstance): Promise
       return reply.status(400).send({ error: 'task_id, agent_id, and team_id are required' });
     }
 
-    // TODO: Full claim routing to source team (F006/F007)
-    console.log(`[federation-hub] Claim request: task=${body.task_id}, agent=${body.agent_id}, team=${body.team_id}`);
-    return { status: 'pending_authorization' };
+    const db = getDatabase();
+    const now = Math.floor(Date.now() / 1000);
+    const authRequestId = crypto.randomUUID();
+
+    try {
+      db.run('BEGIN TRANSACTION');
+
+      const idxStmt = db.prepare(
+        `SELECT id, group_id, source_team_id FROM federation_task_index
+         WHERE task_id = ? AND status = 'open'`,
+      );
+      idxStmt.bind([body.task_id]);
+      if (!idxStmt.step()) {
+        idxStmt.free();
+        db.run('ROLLBACK');
+        return reply.status(409).send({ error: 'Task is not available for federation claim' });
+      }
+      const indexRow = idxStmt.getAsObject() as { id: string; group_id: string; source_team_id: string };
+      idxStmt.free();
+
+      if (indexRow.source_team_id === body.team_id) {
+        db.run('ROLLBACK');
+        return reply.status(400).send({ error: 'Cannot claim your own team\'s task' });
+      }
+
+      db.run(
+        `UPDATE federation_task_index
+         SET status = 'claimed', claimed_by_team_id = ?, claimed_at = ?
+         WHERE id = ? AND status = 'open'`,
+        [body.team_id, now, indexRow.id],
+      );
+      const changes = db.exec('SELECT changes() as changes')[0]?.values[0][0] as number;
+      if (changes === 0) {
+        db.run('ROLLBACK');
+        return reply.status(409).send({ error: 'Task is already claimed' });
+      }
+
+      db.run('UPDATE tasks SET status = ? WHERE id = ?', ['pending_authorization', body.task_id]);
+      db.run('UPDATE group_tasks SET authorization_status = ? WHERE task_id = ?', ['pending', body.task_id]);
+      db.run(
+        `INSERT INTO authorization_requests
+         (id, group_task_id, requesting_team_id, requesting_agent_id, status, created_at, expires_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?)`,
+        [authRequestId, body.task_id, body.team_id, body.agent_id, 'pending', now, now + 300],
+      );
+
+      db.run('COMMIT');
+      db.save();
+
+      return {
+        success: true,
+        authorization_request_id: authRequestId,
+        status: 'pending_authorization',
+        expires_at: now + 300,
+      };
+    } catch (err) {
+      db.run('ROLLBACK');
+      const error = err as Error;
+      return reply.status(500).send({ error: error.message });
+    }
   });
 }
 

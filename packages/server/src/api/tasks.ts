@@ -62,15 +62,21 @@ export async function registerTaskRoutes(app: FastifyInstance): Promise<void> {
     const query = request.query as { status?: string };
     const db = getDatabase();
     let sql =
-      'SELECT id, channel_id, title, description, priority, mode, status, assignee_id, creator_id, tags, required_capabilities, timeout_seconds, max_retries, output, parent_task_id, depth, created_at, claimed_at, completed_at FROM tasks';
+      `SELECT t.id, t.channel_id, t.title, t.description, t.priority, t.mode, t.status, t.assignee_id,
+              t.creator_id, t.tags, t.required_capabilities, t.is_group_task, t.source_team_id,
+              t.timeout_seconds, t.max_retries, t.retry_count, t.output, t.parent_task_id, t.depth,
+              t.created_at, t.claimed_at, t.completed_at, gt.group_id,
+              gt.source_team_id as gt_source_team_id, gt.authorization_status
+       FROM tasks t
+       LEFT JOIN group_tasks gt ON t.id = gt.task_id`;
     const params: unknown[] = [];
 
     if (query.status) {
-      sql += ' WHERE status = ?';
+      sql += ' WHERE t.status = ?';
       params.push(query.status);
     }
 
-    sql += ' ORDER BY created_at DESC';
+    sql += ' ORDER BY t.created_at DESC';
 
     const stmt = db.prepare(sql);
     if (params.length > 0) {
@@ -94,9 +100,13 @@ export async function registerTaskRoutes(app: FastifyInstance): Promise<void> {
         requiredCapabilities: row.required_capabilities
           ? JSON.parse(row.required_capabilities as string)
           : [],
+        isGroupTask: Boolean(row.is_group_task),
+        sourceTeamId: ((row.gt_source_team_id as string | null) ?? (row.source_team_id as string | null)) ?? undefined,
+        groupId: (row.group_id as string | null) ?? undefined,
+        authorizationStatus: (row.authorization_status as Task['authorizationStatus'] | null) ?? undefined,
         timeoutSeconds: (row.timeout_seconds as number) || 300,
         maxRetries: (row.max_retries as number) || 0,
-        retryCount: 0,
+        retryCount: (row.retry_count as number) || 0,
         output: row.output as string | undefined,
         parentTaskId: row.parent_task_id as string | undefined,
         depth: (row.depth as number) ?? 0,

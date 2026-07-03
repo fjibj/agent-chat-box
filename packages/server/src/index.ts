@@ -12,6 +12,7 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 // Project root: packages/server/src → ../../..
 const PROJECT_ROOT = path.resolve(__dirname, '..', '..', '..');
+const VERSION = JSON.parse(fs.readFileSync(path.join(PROJECT_ROOT, 'package.json'), 'utf-8')).version;
 import { handleConnection } from './ws/handler.js';
 import { registerMachineRoutes } from './api/machines.js';
 import { registerChannelRoutes, ensureDefaultChannel } from './api/channels.js';
@@ -44,17 +45,17 @@ async function main() {
   console.log('[server] Fastify created');
 
   // 3. CORS
-  await app.register(fastifyCors, { origin: true, credentials: true });
+  await app.register(fastifyCors as never, { origin: true, credentials: true });
   console.log('[server] CORS registered');
 
   // 3.5 Multipart (file uploads)
-  await app.register(fastifyMultipart);
+  await app.register(fastifyMultipart as never);
   console.log('[server] Multipart registered');
 
   // 4. Static files (Web UI) — only serve if directory exists
   const webDist = path.join(PROJECT_ROOT, 'packages', 'web', 'dist');
   if (fs.existsSync(webDist)) {
-    await app.register(fastifyStatic, {
+    await app.register(fastifyStatic as never, {
       root: webDist,
       prefix: '/',
       wildcard: false,
@@ -63,7 +64,7 @@ async function main() {
 
   // 5. API routes
   app.get('/api/version', async () => ({
-    version: '0.1.0',
+    version: VERSION,
     name: 'agent-chat-box',
   }));
 
@@ -73,7 +74,7 @@ async function main() {
   }));
 
   app.get('/api/server-info', async () => ({
-    version: '0.1.0',
+    version: VERSION,
     name: 'agent-chat-box',
     host: HOST,
     port: PORT,

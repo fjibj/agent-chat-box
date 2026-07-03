@@ -314,4 +314,67 @@ describe('Tasks API (legacy)', () => {
       expect(body.status).toBe('failed');
     });
   });
+
+  describe('group task fields', () => {
+    it('lists group task metadata and pending authorization state', async () => {
+      const { app, db } = await buildApp();
+      db.run('INSERT INTO channels (id, name, created_at) VALUES (?, ?, ?)', ['ch-1', '#test', 0]);
+      db.run(
+        'INSERT INTO groups (id, name, owner_team_id, contract_yaml, created_at) VALUES (?, ?, ?, ?, ?)',
+        ['group-1', 'Group One', 'team-default', '', 0],
+      );
+      db.run(
+        `INSERT INTO tasks (id, channel_id, title, priority, mode, status, creator_id, is_group_task, source_team_id, created_at, timeout_seconds, max_retries, retry_count)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        ['task-group-1', 'ch-1', 'Group Task', 'normal', 'compete', 'pending_authorization', 'user-default', 1, 'team-default', 1000, 3600, 0, 0],
+      );
+      db.run(
+        'INSERT INTO group_tasks (task_id, group_id, source_team_id, authorization_status, created_at) VALUES (?, ?, ?, ?, ?)',
+        ['task-group-1', 'group-1', 'team-default', 'pending', 1000],
+      );
+      db.save();
+
+      const res = await app.inject({ method: 'GET', url: '/api/tasks' });
+      expect(res.statusCode).toBe(200);
+      const body = JSON.parse(res.payload);
+      const task = body.tasks.find((t: { id: string }) => t.id === 'task-group-1');
+      expect(task).toMatchObject({
+        status: 'pending_authorization',
+        isGroupTask: true,
+        sourceTeamId: 'team-default',
+        groupId: 'group-1',
+        authorizationStatus: 'pending',
+      });
+    });
+
+    it('returns group task metadata from timeline task payload', async () => {
+      const { app, db } = await buildApp();
+      db.run('INSERT INTO channels (id, name, created_at) VALUES (?, ?, ?)', ['ch-1', '#test', 0]);
+      db.run(
+        'INSERT INTO groups (id, name, owner_team_id, contract_yaml, created_at) VALUES (?, ?, ?, ?, ?)',
+        ['group-1', 'Group One', 'team-default', '', 0],
+      );
+      db.run(
+        `INSERT INTO tasks (id, channel_id, title, priority, mode, status, creator_id, is_group_task, source_team_id, created_at, timeout_seconds, max_retries, retry_count)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        ['task-group-2', 'ch-1', 'Group Timeline Task', 'normal', 'compete', 'pending', 'user-default', 1, 'team-default', 1000, 3600, 0, 0],
+      );
+      db.run(
+        'INSERT INTO group_tasks (task_id, group_id, source_team_id, authorization_status, created_at) VALUES (?, ?, ?, ?, ?)',
+        ['task-group-2', 'group-1', 'team-default', 'none', 1000],
+      );
+      db.save();
+
+      const res = await app.inject({ method: 'GET', url: '/api/tasks/task-group-2/timeline' });
+      expect(res.statusCode).toBe(200);
+      const body = JSON.parse(res.payload);
+      expect(body.task).toMatchObject({
+        id: 'task-group-2',
+        isGroupTask: true,
+        sourceTeamId: 'team-default',
+        groupId: 'group-1',
+        authorizationStatus: 'none',
+      });
+    });
+  });
 });

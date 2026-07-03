@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
+import { ReputationBadge } from '../components/ReputationBadge';
 
 interface AuthRequest {
   id: string;
@@ -7,6 +8,7 @@ interface AuthRequest {
   agent_name: string;
   agent_runtime: string;
   requesting_team_id: string;
+  group_id: string;
   status: string;
   created_at: number;
   expires_at: number;
@@ -14,6 +16,7 @@ interface AuthRequest {
 
 export function AuthorizationsPage() {
   const [pending, setPending] = useState<AuthRequest[]>([]);
+  const [reputation, setReputation] = useState<Record<string, number>>({});
   const [teamId] = useState('team-default');
   const [error, setError] = useState('');
 
@@ -29,6 +32,23 @@ export function AuthorizationsPage() {
     const interval = setInterval(fetchPending, 10_000);
     return () => clearInterval(interval);
   }, [fetchPending]);
+
+  useEffect(() => {
+    const pairs = pending
+      .filter(ar => ar.group_id && ar.requesting_team_id)
+      .map(ar => [ar.group_id, ar.requesting_team_id] as const);
+    const uniquePairs = [...new Map(pairs.map(pair => [`${pair[0]}:${pair[1]}`, pair])).values()];
+    if (uniquePairs.length === 0) {
+      setReputation({});
+      return;
+    }
+    Promise.all(uniquePairs.map(([groupId, requestingTeamId]) =>
+      fetch(`/api/groups/${groupId}/reputation/${requestingTeamId}`)
+        .then(r => r.json())
+        .then(data => [requestingTeamId, data.total_score ?? 0] as const)
+        .catch(() => [requestingTeamId, 0] as const),
+    )).then(entries => setReputation(Object.fromEntries(entries)));
+  }, [pending]);
 
   const handleApprove = (id: string) => {
     fetch(`/api/authorizations/${id}/approve`, { method: 'POST' })
@@ -79,6 +99,7 @@ export function AuthorizationsPage() {
               <div className="flex items-center gap-4 mb-3 text-sm text-gray-400">
                 <span>Agent: {ar.agent_name} ({ar.agent_runtime})</span>
                 <span>Team: {ar.requesting_team_id.slice(0, 8)}...</span>
+                <span className="flex items-center gap-1">Reputation: <ReputationBadge score={reputation[ar.requesting_team_id] ?? 0} /></span>
               </div>
               <div className="flex gap-3">
                 <button

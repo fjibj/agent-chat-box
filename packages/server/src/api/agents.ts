@@ -369,7 +369,31 @@ export function registerNameResolution(app: FastifyInstance): void {
       }
     }
 
-    // 3. Fill in unknowns with truncated UUID
+    // 3. Look up teams from DB
+    for (const id of idList) {
+      if (names[id]) continue;
+      const stmt = db.prepare('SELECT name FROM teams WHERE id = ?');
+      stmt.bind([id]);
+      if (stmt.step()) {
+        const row = stmt.getAsObject() as { name: string };
+        names[id] = row.name;
+      }
+      stmt.free();
+    }
+
+    // 4. Look up groups from DB
+    for (const id of idList) {
+      if (names[id]) continue;
+      const stmt = db.prepare('SELECT name FROM groups WHERE id = ?');
+      stmt.bind([id]);
+      if (stmt.step()) {
+        const row = stmt.getAsObject() as { name: string };
+        names[id] = row.name;
+      }
+      stmt.free();
+    }
+
+    // 5. Fill in unknowns with truncated UUID
     for (const id of idList) {
       if (!names[id]) {
         names[id] = id.slice(0, 8) + '...';

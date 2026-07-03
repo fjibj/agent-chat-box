@@ -46,7 +46,7 @@ export async function buildApp() {
   const app = Fastify({ logger: false });
 
   // Register multipart plugin for uploads
-  await app.register(fastifyMultipart);
+  await app.register(fastifyMultipart as never);
 
   // Routes only — skip static files and WebSocket
   await registerMachineRoutes(app);

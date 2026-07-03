@@ -9,7 +9,14 @@ import { TASK_TIMEOUT_CHECK_INTERVAL_MS } from '@agent-chat-box/shared';
 export function getTask(taskId: string): Task | null {
   const db = getDatabase();
   const stmt = db.prepare(
-    'SELECT id, channel_id, title, description, priority, mode, status, tags, creator_id, assignee_id, parent_task_id, depth, required_capabilities, output, timeout_seconds, max_retries, retry_count, created_at, claimed_at, completed_at FROM tasks WHERE id = ?',
+    `SELECT t.id, t.channel_id, t.title, t.description, t.priority, t.mode, t.status, t.tags, t.creator_id,
+            t.assignee_id, t.parent_task_id, t.depth, t.required_capabilities, t.is_group_task,
+            t.source_team_id, t.output, t.timeout_seconds, t.max_retries, t.retry_count, t.created_at,
+            t.claimed_at, t.completed_at, gt.group_id, gt.source_team_id as gt_source_team_id,
+            gt.authorization_status
+     FROM tasks t
+     LEFT JOIN group_tasks gt ON t.id = gt.task_id
+     WHERE t.id = ?`,
   );
   stmt.bind([taskId]);
 
@@ -37,6 +44,10 @@ export function getTask(taskId: string): Task | null {
     requiredCapabilities: row.required_capabilities
       ? JSON.parse(row.required_capabilities as string)
       : undefined,
+    isGroupTask: Boolean(row.is_group_task),
+    sourceTeamId: ((row.gt_source_team_id as string | null) ?? (row.source_team_id as string | null)) ?? undefined,
+    groupId: (row.group_id as string | null) ?? undefined,
+    authorizationStatus: (row.authorization_status as Task['authorizationStatus'] | null) ?? undefined,
     output: (row.output as string | null) ?? undefined,
     timeoutSeconds: row.timeout_seconds as number,
     maxRetries: row.max_retries as number,

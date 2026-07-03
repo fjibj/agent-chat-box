@@ -1,0 +1,18 @@
+{
+  "todo": [
+    { "file": "packages/server/src/api/authorizations.ts", "text": "// TODO: Send WebSocket authorization.rejected to requesting team", "story": "STORY-F012" },
+    { "file": "packages/server/src/api/authorizations.ts", "text": "// TODO: Send WebSocket authorization.expired notifications", "story": "STORY-F012" },
+    { "file": "packages/server/src/api/group-tasks.ts", "text": "// TODO: Send WebSocket authorization.requested to task source team owner", "story": "STORY-F012" },
+    { "file": "packages/server/src/api/groups.ts", "text": "// TODO: Send WebSocket notification to group members (group.contract.updated)", "story": "STORY-G027" },
+    { "file": "packages/server/src/api/groups.ts", "text": "// TODO: Send WebSocket notification (group.joined)", "story": "STORY-G027" },
+    { "file": "packages/server/src/api/groups.ts", "text": "// TODO: Reset claimed tasks back to pending pool (requires group_tasks table from STORY-G010)", "story": "STORY-G027" },
+    { "file": "packages/server/src/api/groups.ts", "text": "// TODO: Send WebSocket notification (group.left)", "story": "STORY-G027" },
+    { "file": "packages/server/src/api/reviews.ts", "text": "// TODO: Send WebSocket review.completed to executing team", "story": "STORY-G031" },
+    { "file": "packages/server/src/api/reviews.ts", "text": "// TODO: Send WebSocket review.completed to executing team", "story": "STORY-G031" },
+    { "file": "packages/server/src/federation/hub.ts", "text": "// TODO: Route claim to source team server (implemented in F006/F007)", "story": "STORY-F012" }
+  ],
+  "orphanComponents": [
+    { "file": "packages/web/src/components/ReputationBadge.tsx", "story": "STORY-G030" }
+  ],
+  "hardcodedVersions": []
+}

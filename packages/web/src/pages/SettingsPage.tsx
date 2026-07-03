@@ -1,5 +1,16 @@
 import { useState, useEffect } from 'react';
 
+interface FederationPeer {
+  id: string;
+  groupId: string;
+  groupName?: string;
+  teamId: string;
+  teamName?: string;
+  status: 'connected' | 'disconnected' | 'error';
+  labels?: string[];
+  lastHeartbeat?: number;
+}
+
 interface ServerInfo {
   version: string;
   name: string;
@@ -54,6 +65,7 @@ function formatUptime(seconds: number): string {
 export function SettingsPage() {
   const [serverInfo, setServerInfo] = useState<ServerInfo | null>(null);
   const [machines, setMachines] = useState<{ id: string; name: string; apiKey?: string }[]>([]);
+  const [peers, setPeers] = useState<FederationPeer[]>([]);
   const [showNewKey, setShowNewKey] = useState<string | null>(null);
 
   useEffect(() => {
@@ -65,6 +77,11 @@ export function SettingsPage() {
     fetch('/api/machines')
       .then(res => res.json())
       .then(data => setMachines(data.machines || []))
+      .catch(console.error);
+
+    fetch('/api/federation/peers')
+      .then(res => res.json())
+      .then(data => setPeers(data.peers || []))
       .catch(console.error);
   }, []);
 
@@ -135,6 +152,36 @@ export function SettingsPage() {
                   ACB_SERVER={serverInfo.daemonUrl} acb daemon start
                 </code>
               </div>
+            </div>
+          )}
+        </section>
+
+        {/* Federation Peers */}
+        <section className="bg-gray-800 rounded-lg p-4">
+          <h3 className="text-sm font-semibold text-gray-400 uppercase mb-3">Federation Peers</h3>
+          {peers.length === 0 ? (
+            <p className="text-sm text-gray-500">No federation peers connected.</p>
+          ) : (
+            <div className="space-y-2">
+              {peers.map(peer => (
+                <div key={peer.id} className="bg-gray-700 rounded-lg p-3">
+                  <div className="flex items-center justify-between mb-2">
+                    <div>
+                      <span className="text-sm font-medium">{peer.teamName || peer.teamId}</span>
+                      {peer.groupName && <span className="text-xs text-gray-400 ml-2">in {peer.groupName}</span>}
+                    </div>
+                    <span className={`text-xs px-2 py-1 rounded text-white ${peer.status === 'connected' ? 'bg-green-600' : peer.status === 'error' ? 'bg-red-600' : 'bg-gray-600'}`}>
+                      {peer.status}
+                    </span>
+                  </div>
+                  <div className="flex flex-wrap gap-1">
+                    {peer.labels?.length ? peer.labels.map(label => (
+                      <span key={label} className="text-xs bg-gray-600 px-2 py-1 rounded text-gray-200">{label}</span>
+                    )) : <span className="text-xs text-gray-500">No labels</span>}
+                  </div>
+                  {peer.lastHeartbeat && <div className="text-xs text-gray-400 mt-2">Last heartbeat: {new Date(peer.lastHeartbeat).toLocaleString()}</div>}
+                </div>
+              ))}
             </div>
           )}
         </section>

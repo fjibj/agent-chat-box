@@ -72,26 +72,29 @@
 | Daemon | Node.js + WebSocket |
 | 前端 | React 19 + Vite 6 + Tailwind CSS 4 |
 | 类型 | TypeScript strict |
-| 包管理 | pnpm workspace |
-| 测试 | Vitest (233 用例) + Playwright E2E |
+| 包管理 | npm（monorepo，根目录管理依赖） |
+| 测试 | Vitest（337+ 用例） + Playwright E2E |
 
 ## 快速开始
 
 ```bash
 # 安装依赖
-pnpm install
+npm install
 
-# 启动服务器 + Web UI
-pnpm dev
+# 启动服务器 + Web UI（需要两个终端）
+npm run dev:server
+npm run dev:web
 
 # 另一个终端：启动 Daemon
-pnpm --filter @agent-chat-box/daemon start -- --server ws://localhost:3000 --token <your-machine-token>
+node packages/daemon/dist/daemon.cjs --server ws://localhost:3000 --token <your-machine-token>
+# 或构建后运行
+cd packages/daemon && npm run build && node dist/daemon.cjs --server ws://localhost:3000 --token <your-machine-token>
 
 # 联邦模式（成员团队 Runner）
 FEDERATION_URL=ws://hub.example.com/federation \
 FEDERATION_INVITE_CODE=ABC123 \
 FEDERATION_TEAM_ID=team-b \
-pnpm --filter @agent-chat-box/server start
+npm run dev:server
 ```
 
 ## 项目结构
@@ -123,6 +126,7 @@ agent-chat-box/
 
 ## 版本历史
 
+- **[v0.2.0-followup](CHANGELOG.md)** — UI 补齐 + 联邦完整链路 + 质量门禁（2026-07-03）
 - **[v0.2.0](CHANGELOG.md)** — 群级扩展 + 联邦网关（2026-05-16）
 - **[v0.1.0](CHANGELOG.md)** — 初始版本：跨机调度、实时聊天、任务系统（2026-05-04）
 
@@ -136,8 +140,10 @@ agent-chat-box/
 - [联邦网关 PRD](docs/prd-federation-gateway-2026-05-16.md)
 - [Sprint 计划](docs/sprint-plan-agent-chat-box-2026-05-01.md)
 - [验证记录](docs/manual-verification.md)
-- [用户故事](docs/stories/) — 61 个故事 (STORY-001 ~ 035, STORY-G001 ~ G026, STORY-F001 ~ F010)
+- [用户故事](docs/stories/) — 71 个故事 (STORY-001~035, STORY-G001~G031, STORY-F001~F012, STORY-Q001)
 - [测试报告](docs/test-artifacts/)
+- [BMAD 故事质量门禁](docs/bmad-story-quality-gate.md)
+- [TEA 质量门禁](docs/test-artifacts/tea-quality-gate.md)
 - [联邦网络拓扑分析](docs/federation-network-topology-analysis.md)
 - [联邦 E2E 测试指南](docs/federation-e2e-manual-test-guide.md)
 

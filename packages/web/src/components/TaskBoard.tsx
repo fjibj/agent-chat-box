@@ -15,6 +15,10 @@ interface Task {
   assigneeId?: string;
   parentTaskId?: string;
   depth?: number;
+  isGroupTask?: boolean;
+  sourceTeamId?: string;
+  groupId?: string;
+  authorizationStatus?: 'none' | 'pending' | 'approved' | 'rejected' | 'expired';
   createdAt: number;
 }
 
@@ -37,6 +41,8 @@ export function TaskBoard() {
     for (const t of taskList) {
       if (t.creatorId) ids.add(t.creatorId);
       if (t.assigneeId) ids.add(t.assigneeId);
+      if (t.sourceTeamId) ids.add(t.sourceTeamId);
+      if (t.groupId) ids.add(t.groupId);
     }
     if (ids.size === 0) return;
     fetch(`/api/resolve-names?ids=${encodeURIComponent([...ids].join(','))}`)
@@ -97,6 +103,12 @@ export function TaskBoard() {
       title: 'Pending',
       status: 'pending',
       tasks: filteredTasks.filter(t => getEffectiveStatus(t) === 'pending'),
+    },
+    {
+      id: 'authorization',
+      title: 'Authorization',
+      status: 'pending_authorization',
+      tasks: filteredTasks.filter(t => getEffectiveStatus(t) === 'pending_authorization'),
     },
     {
       id: 'active',

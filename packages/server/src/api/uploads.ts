@@ -20,7 +20,7 @@ export async function registerUploadRoutes(app: FastifyInstance): Promise<void> 
 
   // POST /api/uploads — upload file
   app.post('/api/uploads', async (request: FastifyRequest, reply: FastifyReply) => {
-    const data = await (request as { file: () => Promise<any> }).file(); // eslint-disable-line @typescript-eslint/no-explicit-any -- fastify-multipart typing
+    const data = await (request as unknown as { file: () => Promise<any> }).file(); // eslint-disable-line @typescript-eslint/no-explicit-any -- fastify-multipart typing
     if (!data) {
       return reply.status(400).send({ error: 'No file provided' });
     }

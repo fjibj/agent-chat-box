@@ -96,7 +96,16 @@ export async function registerAuthorizationRoutes(app: FastifyInstance): Promise
 
       db.save();
 
-      // TODO: Send WebSocket authorization.approved to requesting team
+      try {
+        const { wakeFederationAgent } = await import('../federation/hub.js');
+        wakeFederationAgent(ar.requesting_team_id, ar.requesting_agent_id, ar.group_task_id, {
+          title: 'Federation task approved',
+          requiredLabels: [],
+          sourceTeamId: '',
+        });
+      } catch {
+        // Ignore wake failures; the task remains claimed and can be polled/recovered.
+      }
 
       return { success: true, status: 'approved' };
     } catch (err) {

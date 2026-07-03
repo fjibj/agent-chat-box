@@ -9,6 +9,10 @@ interface TaskCardProps {
   depth?: number;
   creatorId?: string;
   assigneeId?: string;
+  isGroupTask?: boolean;
+  sourceTeamId?: string;
+  groupId?: string;
+  authorizationStatus?: 'none' | 'pending' | 'approved' | 'rejected' | 'expired';
   names?: Record<string, string>;
   subtaskProgress?: { completed: number; total: number };
   onClick?: () => void;
@@ -30,6 +34,7 @@ const priorityLabels = {
 
 const statusConfig: Record<string, { color: string; label: string }> = {
   pending: { color: 'bg-yellow-500', label: 'Pending' },
+  pending_authorization: { color: 'bg-amber-500', label: 'Awaiting Auth' },
   claimed: { color: 'bg-blue-500', label: 'Claimed' },
   running: { color: 'bg-blue-400', label: 'Running' },
   decomposing: { color: 'bg-purple-500', label: 'Decomposing' },
@@ -38,17 +43,20 @@ const statusConfig: Record<string, { color: string; label: string }> = {
   failed: { color: 'bg-red-500', label: 'Failed' },
 };
 
-export function TaskCard({ title, description, priority, status, mode, parentTaskId, depth, creatorId, assigneeId, names, subtaskProgress, onClick }: TaskCardProps) {
+export function TaskCard({ title, description, priority, status, mode, parentTaskId, depth, creatorId, assigneeId, isGroupTask, sourceTeamId, groupId, authorizationStatus, names, subtaskProgress, onClick }: TaskCardProps) {
   const st = statusConfig[status] || { color: 'bg-gray-500', label: status };
   const creatorName = creatorId && names?.[creatorId];
   const assigneeName = assigneeId && names?.[assigneeId];
+  const sourceTeamName = sourceTeamId && (names?.[sourceTeamId] || sourceTeamId);
+  const groupName = groupId && (names?.[groupId] || groupId);
   const isSubtask = !!parentTaskId;
+  const isGroup = !!isGroupTask || !!sourceTeamId || !!groupId;
   const depthLabel = depth && depth > 0 ? `L${depth}` : '';
 
   return (
     <div
       onClick={onClick}
-      className="bg-gray-700 rounded-lg p-4 cursor-pointer hover:bg-gray-600 transition-colors"
+      className={`bg-gray-700 rounded-lg p-4 cursor-pointer hover:bg-gray-600 transition-colors ${isGroup ? 'border border-indigo-500/60' : ''}`}
     >
       {/* Top row: priority + status + mode */}
       <div className="flex items-center justify-between mb-2">
@@ -62,6 +70,16 @@ export function TaskCard({ title, description, priority, status, mode, parentTas
           {mode && (
             <span className="text-xs px-2 py-1 rounded bg-purple-600 text-white">
               {mode}
+            </span>
+          )}
+          {isGroup && (
+            <span className="text-xs px-2 py-1 rounded bg-indigo-600 text-white">
+              Group
+            </span>
+          )}
+          {authorizationStatus && authorizationStatus !== 'none' && (
+            <span className="text-xs px-2 py-1 rounded bg-amber-700 text-white">
+              Auth: {authorizationStatus}
             </span>
           )}
           {depthLabel && (
@@ -98,6 +116,13 @@ export function TaskCard({ title, description, priority, status, mode, parentTas
               style={{ width: `${(subtaskProgress.completed / subtaskProgress.total) * 100}%` }}
             />
           </div>
+        </div>
+      )}
+
+      {(groupName || sourceTeamName) && (
+        <div className="mt-3 space-y-1 text-xs text-indigo-200">
+          {groupName && <div>Group: {groupName}</div>}
+          {sourceTeamName && <div>Source: {sourceTeamName}</div>}
         </div>
       )}
 

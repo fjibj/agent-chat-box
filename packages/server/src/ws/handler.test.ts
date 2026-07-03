@@ -19,11 +19,11 @@ import { buildApp } from '../test-helpers.js';
 
 // Mock WebSocket with event emitter capabilities
 class MockWebSocket {
-  readyState = WebSocket.OPEN;
+  readyState: number = WebSocket.OPEN;
   sent: string[] = [];
   close = vi.fn(() => {
     this.readyState = WebSocket.CLOSED;
-    this._emit('close');
+    this.emit('close');
   });
   send = vi.fn((data: string) => this.sent.push(data));
   on = vi.fn((event: string, handler: (...args: unknown[]) => void) => {
@@ -78,7 +78,7 @@ describe('WebSocket Handler Unit Tests', () => {
     it('sends message to an existing client', () => {
       const ws = new MockWebSocket() as unknown as WebSocket;
       const clients = getClients();
-      clients.set('client-1', { ws, type: 'human', id: 'client-1', authenticated: true });
+      clients.set('client-1', { ws, type: 'human' as const, id: 'client-1', authenticated: true });
 
       sendTo('client-1', { v: 1, type: 'test.msg', ts: Date.now(), data: {} });
 
@@ -94,9 +94,9 @@ describe('WebSocket Handler Unit Tests', () => {
 
     it('does nothing when client socket is not OPEN', () => {
       const ws = new MockWebSocket() as unknown as WebSocket;
-      ws.readyState = WebSocket.CLOSED;
+      (ws as unknown as MockWebSocket).readyState = WebSocket.CLOSED;
       const clients = getClients();
-      clients.set('client-1', { ws, type: 'human', id: 'client-1', authenticated: true });
+      clients.set('client-1', { ws, type: 'human' as const, id: 'client-1', authenticated: true });
 
       sendTo('client-1', { v: 1, type: 'test.msg', ts: Date.now(), data: {} });
 
@@ -111,9 +111,9 @@ describe('WebSocket Handler Unit Tests', () => {
       const ws3 = new MockWebSocket() as unknown as WebSocket;
 
       const clients = getClients();
-      clients.set('c1', { ws: ws1, type: 'daemon', id: 'c1', authenticated: true, machineId: 'm1' });
-      clients.set('c2', { ws: ws2, type: 'daemon', id: 'c2', authenticated: true, machineId: 'm2' });
-      clients.set('c3', { ws: ws3, type: 'human', id: 'c3', authenticated: true });
+      clients.set('c1', { ws: ws1, type: 'daemon' as const, id: 'c1', authenticated: true, machineId: 'm1' });
+      clients.set('c2', { ws: ws2, type: 'daemon' as const, id: 'c2', authenticated: true, machineId: 'm2' });
+      clients.set('c3', { ws: ws3, type: 'human' as const, id: 'c3', authenticated: true });
 
       const groupTeams = getGroupTeams();
       groupTeams.set('group-1', new Set(['team-a', 'team-b']));
@@ -139,8 +139,8 @@ describe('WebSocket Handler Unit Tests', () => {
       const ws2 = new MockWebSocket() as unknown as WebSocket;
 
       const clients = getClients();
-      clients.set('c1', { ws: ws1, type: 'daemon', id: 'c1', authenticated: true, machineId: 'm1' });
-      clients.set('c2', { ws: ws2, type: 'daemon', id: 'c2', authenticated: true, machineId: 'm2' });
+      clients.set('c1', { ws: ws1, type: 'daemon' as const, id: 'c1', authenticated: true, machineId: 'm1' });
+      clients.set('c2', { ws: ws2, type: 'daemon' as const, id: 'c2', authenticated: true, machineId: 'm2' });
 
       const groupTeams = getGroupTeams();
       groupTeams.set('group-1', new Set(['team-a']));
@@ -156,12 +156,12 @@ describe('WebSocket Handler Unit Tests', () => {
 
     it('skips clients with non-OPEN socket', () => {
       const ws1 = new MockWebSocket() as unknown as WebSocket;
-      ws1.readyState = WebSocket.CLOSED;
+      (ws1 as unknown as MockWebSocket).readyState = WebSocket.CLOSED;
       const ws2 = new MockWebSocket() as unknown as WebSocket;
 
       const clients = getClients();
-      clients.set('c1', { ws: ws1, type: 'daemon', id: 'c1', authenticated: true, machineId: 'm1' });
-      clients.set('c2', { ws: ws2, type: 'daemon', id: 'c2', authenticated: true, machineId: 'm2' });
+      clients.set('c1', { ws: ws1, type: 'daemon' as const, id: 'c1', authenticated: true, machineId: 'm1' });
+      clients.set('c2', { ws: ws2, type: 'daemon' as const, id: 'c2', authenticated: true, machineId: 'm2' });
 
       const groupTeams = getGroupTeams();
       groupTeams.set('group-1', new Set(['team-a']));
@@ -183,7 +183,7 @@ describe('WebSocket Handler Unit Tests', () => {
     it('does nothing for team with no mapped clients', () => {
       const ws1 = new MockWebSocket() as unknown as WebSocket;
       const clients = getClients();
-      clients.set('c1', { ws: ws1, type: 'daemon', id: 'c1', authenticated: true, machineId: 'm1' });
+      clients.set('c1', { ws: ws1, type: 'daemon' as const, id: 'c1', authenticated: true, machineId: 'm1' });
 
       const groupTeams = getGroupTeams();
       groupTeams.set('group-1', new Set(['team-a', 'team-b']));
@@ -260,8 +260,8 @@ describe('WebSocket Handler Unit Tests', () => {
       const ws2 = new MockWebSocket() as unknown as WebSocket;
 
       const clients = getClients();
-      clients.set('c1', { ws: ws1, type: 'human', id: 'c1', authenticated: true });
-      clients.set('c2', { ws: ws2, type: 'human', id: 'c2', authenticated: true });
+      clients.set('c1', { ws: ws1, type: 'human' as const, id: 'c1', authenticated: true });
+      clients.set('c2', { ws: ws2, type: 'human' as const, id: 'c2', authenticated: true });
 
       (getChannelMembers as ReturnType<typeof vi.fn>).mockReturnValue([{ memberId: 'c1', kind: 'human' }]);
 
@@ -299,11 +299,11 @@ describe('WebSocket Handler Unit Tests', () => {
       const ws1 = new MockWebSocket() as unknown as WebSocket;
       const ws2 = new MockWebSocket() as unknown as WebSocket;
       const ws3 = new MockWebSocket() as unknown as WebSocket;
-      ws3.readyState = WebSocket.CLOSED;
+      (ws3 as unknown as MockWebSocket).readyState = WebSocket.CLOSED;
 
-      getClients().set('c1', { ws: ws1, type: 'human', id: 'c1', authenticated: true });
-      getClients().set('c2', { ws: ws2, type: 'human', id: 'c2', authenticated: true });
-      getClients().set('c3', { ws: ws3, type: 'human', id: 'c3', authenticated: true });
+      getClients().set('c1', { ws: ws1, type: 'human' as const, id: 'c1', authenticated: true });
+      getClients().set('c2', { ws: ws2, type: 'human' as const, id: 'c2', authenticated: true });
+      getClients().set('c3', { ws: ws3, type: 'human' as const, id: 'c3', authenticated: true });
 
       broadcast({ v: 1, type: 'test.broadcast', ts: Date.now(), data: {} });
 
@@ -316,7 +316,7 @@ describe('WebSocket Handler Unit Tests', () => {
   describe('getClient', () => {
     it('returns client by id', () => {
       const ws = new MockWebSocket() as unknown as WebSocket;
-      getClients().set('c1', { ws, type: 'human', id: 'c1', authenticated: true });
+      getClients().set('c1', { ws, type: 'human' as const, id: 'c1', authenticated: true });
 
       expect(getClient('c1')?.id).toBe('c1');
       expect(getClient('non-existent')).toBeUndefined();
@@ -326,7 +326,7 @@ describe('WebSocket Handler Unit Tests', () => {
   describe('sendError', () => {
     it('sends error message to client', () => {
       const ws = new MockWebSocket() as unknown as WebSocket;
-      const client = { ws, type: 'human', id: 'c1', authenticated: true };
+      const client = { ws, type: 'human' as const, id: 'c1', authenticated: true };
 
       sendError(client, 'msg-1', 'TEST_ERROR', 'Test error message');
 
@@ -347,7 +347,7 @@ describe('WebSocket Handler Unit Tests', () => {
       })));
 
       const calls = (ws.send as ReturnType<typeof vi.fn>).mock.calls;
-      const pongCall = calls.find((c: [string]) => {
+      const pongCall = calls.find((c: any[]) => {
         try {
           const p = JSON.parse(c[0]);
           return p.type === 'pong';
@@ -365,7 +365,7 @@ describe('WebSocket Handler Unit Tests', () => {
       (ws as unknown as MockWebSocket).emit('message', Buffer.from('not json'));
 
       const calls = (ws.send as ReturnType<typeof vi.fn>).mock.calls;
-      const errorCall = calls.find((c: [string]) => {
+      const errorCall = calls.find((c: any[]) => {
         try {
           const p = JSON.parse(c[0]);
           return p.type === 'error' && p.data.code === 'PARSE_ERROR';
@@ -382,10 +382,10 @@ describe('WebSocket Handler Unit Tests', () => {
 
       (ws as unknown as MockWebSocket).emit('message', Buffer.from(JSON.stringify({
         v: 2, type: 'ping', ts: Date.now(), data: {},
-      })));
+      } as unknown)));
 
       const calls = (ws.send as ReturnType<typeof vi.fn>).mock.calls;
-      const errorCall = calls.find((c: [string]) => {
+      const errorCall = calls.find((c: any[]) => {
         try {
           const p = JSON.parse(c[0]);
           return p.type === 'error' && p.data.code === 'INVALID_MESSAGE';
@@ -405,7 +405,7 @@ describe('WebSocket Handler Unit Tests', () => {
       })));
 
       const calls = (ws.send as ReturnType<typeof vi.fn>).mock.calls;
-      const errorCall = calls.find((c: [string]) => {
+      const errorCall = calls.find((c: any[]) => {
         try {
           const p = JSON.parse(c[0]);
           return p.type === 'error' && p.data.code === 'AUTH_REQUIRED';
@@ -425,7 +425,7 @@ describe('WebSocket Handler Unit Tests', () => {
       })));
 
       const calls = (ws.send as ReturnType<typeof vi.fn>).mock.calls;
-      const errorCall = calls.find((c: [string]) => {
+      const errorCall = calls.find((c: any[]) => {
         try {
           const p = JSON.parse(c[0]);
           return p.type === 'error' && p.data.code === 'UNHANDLED';
@@ -460,7 +460,7 @@ describe('WebSocket Handler Unit Tests', () => {
       })));
 
       const calls = (ws.send as ReturnType<typeof vi.fn>).mock.calls;
-      const errorCall = calls.find((c: [string]) => {
+      const errorCall = calls.find((c: any[]) => {
         try {
           const p = JSON.parse(c[0]);
           return p.type === 'error' && p.data.code === 'INVALID_PAYLOAD';
@@ -514,7 +514,7 @@ describe('WebSocket Handler Unit Tests', () => {
       })));
 
       const calls = (ws.send as ReturnType<typeof vi.fn>).mock.calls;
-      const errorCall = calls.find((c: [string]) => {
+      const errorCall = calls.find((c: any[]) => {
         try {
           const p = JSON.parse(c[0]);
           return p.type === 'error' && p.data.code === 'AUTH_INVALID';
@@ -541,7 +541,7 @@ describe('WebSocket Handler Unit Tests', () => {
       })));
 
       const calls = (ws.send as ReturnType<typeof vi.fn>).mock.calls;
-      const subCall = calls.find((c: [string]) => {
+      const subCall = calls.find((c: any[]) => {
         try {
           const p = JSON.parse(c[0]);
           return p.type === 'channel.subscribed';

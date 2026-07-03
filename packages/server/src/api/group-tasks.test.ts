@@ -104,6 +104,10 @@ describe('G011: Group Task Publish API', () => {
     expect(Array.isArray(pendingBody)).toBe(true);
     expect(pendingBody.length).toBe(1);
     expect(pendingBody[0].id).toBe(task1.id);
+    expect(pendingBody[0].isGroupTask).toBe(true);
+    expect(pendingBody[0].sourceTeamId).toBe(teamA.id);
+    expect(pendingBody[0].groupId).toBe(group.id);
+    expect(pendingBody[0].authorizationStatus).toBe('none');
 
     // Filter by completed
     const completedRes = await app.inject({

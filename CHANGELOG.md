@@ -43,6 +43,37 @@
 - 分层组织架构：Team → Group → Domain → World（当前实现 Group 层）
 - 协议设计预留递归性，支持未来 Domain/World 层扩展
 
+## [0.2.0-followup] - 2026-07-03
+
+### UI 补齐（关闭人工验证发现的 14 个 GAP）
+
+- **Groups 页面生命周期** — 新增 shared_capabilities 编辑、max_retry_per_task、visibility.task_input、Leave Group / Delete Group 按钮
+- **Agents 页面 labels** — Add Agent 模态框支持 labels 输入，Agent 卡片展示 labels badge
+- **TaskBoard 群任务区分** — 新增 Authorization 列，TaskCard 显示 Group 标识、来源团队、authorization_status
+- **ReputationBadge 接入** — 群成员列表与审批卡片显示团队信誉分
+- **Review 工作流 UI** — 已完成群任务详情中显示 Approve / Reject 面板
+- **Federation Peers 面板** — Settings 页面显示联邦 Runner 连接状态
+
+### 联邦网关完整链路
+
+- `POST /api/federation/claim` 实现真实 claim 与并发控制
+- `GET /api/federation/poll` 支持按 agent labels 子集匹配
+- 授权审批通过后调用 `wakeFederationAgent` 唤醒远程 Agent
+- Runner 断连时回收未完成的 federation task
+
+### 流程质量改进
+
+- 新增 `docs/bmad-story-quality-gate.md` 与 `docs/test-artifacts/tea-quality-gate.md`
+- 新增质量门禁脚本：TODO baseline、orphan component、hardcoded version
+- 新增 GitHub PR template 含 BMAD/TEA 自检清单
+- CI 执行 `npm run quality:gates`
+
+### 工程化
+
+- 移除 pnpm，统一使用 npm 管理依赖
+- `/api/version` 与 `/api/server-info` 版本号从根 `package.json` 动态读取
+- 修复 TypeScript typecheck 错误，全部测试与类型检查通过
+
 ## [0.1.0] - 2026-05-04
 
 ### 初始版本

@@ -94,13 +94,25 @@ export interface Task {
   description?: string;
   priority: 'low' | 'normal' | 'high' | 'urgent';
   mode: 'compete' | 'assign' | 'collaborate';
-  status: 'pending' | 'claimed' | 'running' | 'decomposing' | 'verifying' | 'completed' | 'failed';
+  status:
+    | 'pending'
+    | 'pending_authorization'
+    | 'claimed'
+    | 'running'
+    | 'decomposing'
+    | 'verifying'
+    | 'completed'
+    | 'failed';
   tags?: string[];
   creatorId: string;
   assigneeId?: string;
   parentTaskId?: string;
   depth?: number;
   requiredCapabilities?: string[];
+  isGroupTask?: boolean;
+  sourceTeamId?: string;
+  groupId?: string;
+  authorizationStatus?: 'none' | 'pending' | 'approved' | 'rejected' | 'expired';
   output?: string;
   timeoutSeconds: number;
   maxRetries: number;
