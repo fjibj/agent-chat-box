@@ -3,7 +3,7 @@ import { buildApp, createTeam, createMachine, createAgent, createGroup } from '.
 import { getGroupTeams, refreshGroupTeamsMap, getTeamClients } from '../ws/handler.js';
 import { getDatabase } from '../db/index.js';
 import { checkExpiredAuthorizations } from '../api/authorizations.js';
-import { checkThreshold } from '../modules/reputation.js';
+import { checkThreshold, getReputationScore } from '../modules/reputation.js';
 
 // ATDD: EPIC-003 Two-Tier Task Pool & Authorization
 // Stories: G010-G016
@@ -11,14 +11,14 @@ import { checkThreshold } from '../modules/reputation.js';
 describe('G010: DB Migration v6→v7', () => {
   it('TC-G010-001: migration creates group_tasks and authorization_requests tables', async () => {
     const { db } = await buildApp();
-    const gtInfo = db.exec("PRAGMA table_info(group_tasks)");
+    const gtInfo = db.exec('PRAGMA table_info(group_tasks)');
     expect(gtInfo.length).toBeGreaterThan(0);
     const gtColumns = gtInfo[0].values.map((v) => v[1]);
     expect(gtColumns).toContain('task_id');
     expect(gtColumns).toContain('group_id');
     expect(gtColumns).toContain('authorization_status');
 
-    const arInfo = db.exec("PRAGMA table_info(authorization_requests)");
+    const arInfo = db.exec('PRAGMA table_info(authorization_requests)');
     expect(arInfo.length).toBeGreaterThan(0);
     const arColumns = arInfo[0].values.map((v) => v[1]);
     expect(arColumns).toContain('group_task_id');
@@ -74,7 +74,12 @@ describe('G011: Group Task Publish API', () => {
     const teamB = await createTeam(app, 'Executor', 'user-b');
     const group = await createGroup(app, 'Filter Group', teamA.id);
 
-    db.run('INSERT INTO group_members (group_id, team_id, role, joined_at) VALUES (?, ?, ?, ?)', [group.id, teamB.id, 'member', 0]);
+    db.run('INSERT INTO group_members (group_id, team_id, role, joined_at) VALUES (?, ?, ?, ?)', [
+      group.id,
+      teamB.id,
+      'member',
+      0,
+    ]);
 
     // Publish two tasks with different statuses
     const pub1 = await app.inject({
@@ -129,7 +134,10 @@ describe('G012: WebSocket Group Broadcast', () => {
 
     // Add team B manually to group
     db.run('INSERT INTO group_members (group_id, team_id, role, joined_at) VALUES (?, ?, ?, ?)', [
-      group.id, teamB.id, 'member', Math.floor(Date.now() / 1000),
+      group.id,
+      teamB.id,
+      'member',
+      Math.floor(Date.now() / 1000),
     ]);
 
     refreshGroupTeamsMap();
@@ -154,7 +162,10 @@ describe('G012: WebSocket Group Broadcast', () => {
     for (let i = 0; i < 50; i++) {
       const t = await createTeam(app, `Team ${i}`, `user-${i}`);
       db.run('INSERT INTO group_members (group_id, team_id, role, joined_at) VALUES (?, ?, ?, ?)', [
-        group.id, t.id, 'member', Math.floor(Date.now() / 1000),
+        group.id,
+        t.id,
+        'member',
+        Math.floor(Date.now() / 1000),
       ]);
     }
     refreshGroupTeamsMap();
@@ -178,8 +189,18 @@ describe('G013: Cross-Team Claim API', () => {
     const group = await createGroup(app, 'Race Group', teamA.id);
 
     // Add B and C to group
-    db.run('INSERT INTO group_members (group_id, team_id, role, joined_at) VALUES (?, ?, ?, ?)', [group.id, teamB.id, 'member', 0]);
-    db.run('INSERT INTO group_members (group_id, team_id, role, joined_at) VALUES (?, ?, ?, ?)', [group.id, teamC.id, 'member', 0]);
+    db.run('INSERT INTO group_members (group_id, team_id, role, joined_at) VALUES (?, ?, ?, ?)', [
+      group.id,
+      teamB.id,
+      'member',
+      0,
+    ]);
+    db.run('INSERT INTO group_members (group_id, team_id, role, joined_at) VALUES (?, ?, ?, ?)', [
+      group.id,
+      teamC.id,
+      'member',
+      0,
+    ]);
 
     // Create machines and agents
     const mB = await createMachine(app, 'MB');
@@ -224,7 +245,12 @@ describe('G013: Cross-Team Claim API', () => {
     const teamB = await createTeam(app, 'Claimer', 'user-b');
     const group = await createGroup(app, 'Cap Group', teamA.id);
 
-    db.run('INSERT INTO group_members (group_id, team_id, role, joined_at) VALUES (?, ?, ?, ?)', [group.id, teamB.id, 'member', 0]);
+    db.run('INSERT INTO group_members (group_id, team_id, role, joined_at) VALUES (?, ?, ?, ?)', [
+      group.id,
+      teamB.id,
+      'member',
+      0,
+    ]);
 
     const mB = await createMachine(app, 'MB');
     const aB = await createAgent(app, mB.id, 'Agent B', 'claude', ['code']);
@@ -260,7 +286,12 @@ describe('G014: Manual Authorization Mode', () => {
     const teamB = await createTeam(app, 'Claimer', 'user-b');
     const group = await createGroup(app, 'Manual Group', teamA.id);
 
-    db.run('INSERT INTO group_members (group_id, team_id, role, joined_at) VALUES (?, ?, ?, ?)', [group.id, teamB.id, 'member', 0]);
+    db.run('INSERT INTO group_members (group_id, team_id, role, joined_at) VALUES (?, ?, ?, ?)', [
+      group.id,
+      teamB.id,
+      'member',
+      0,
+    ]);
 
     const mB = await createMachine(app, 'MB');
     const aB = await createAgent(app, mB.id, 'Agent B', 'claude');
@@ -304,7 +335,12 @@ describe('G014: Manual Authorization Mode', () => {
     const teamB = await createTeam(app, 'Claimer', 'user-b');
     const group = await createGroup(app, 'Reject Group', teamA.id);
 
-    db.run('INSERT INTO group_members (group_id, team_id, role, joined_at) VALUES (?, ?, ?, ?)', [group.id, teamB.id, 'member', 0]);
+    db.run('INSERT INTO group_members (group_id, team_id, role, joined_at) VALUES (?, ?, ?, ?)', [
+      group.id,
+      teamB.id,
+      'member',
+      0,
+    ]);
 
     const mB = await createMachine(app, 'MB');
     const aB = await createAgent(app, mB.id, 'Agent B', 'claude');
@@ -343,7 +379,12 @@ describe('G014: Manual Authorization Mode', () => {
     const teamB = await createTeam(app, 'Claimer', 'user-b');
     const group = await createGroup(app, 'Expire Group', teamA.id);
 
-    db.run('INSERT INTO group_members (group_id, team_id, role, joined_at) VALUES (?, ?, ?, ?)', [group.id, teamB.id, 'member', 0]);
+    db.run('INSERT INTO group_members (group_id, team_id, role, joined_at) VALUES (?, ?, ?, ?)', [
+      group.id,
+      teamB.id,
+      'member',
+      0,
+    ]);
 
     const mB = await createMachine(app, 'MB');
     const aB = await createAgent(app, mB.id, 'Agent B', 'claude');
@@ -364,7 +405,10 @@ describe('G014: Manual Authorization Mode', () => {
 
     // Manually expire the authorization request
     const now = Math.floor(Date.now() / 1000);
-    db.run('UPDATE authorization_requests SET expires_at = ? WHERE id = ?', [now - 1, claimBody.authorization_request_id]);
+    db.run('UPDATE authorization_requests SET expires_at = ? WHERE id = ?', [
+      now - 1,
+      claimBody.authorization_request_id,
+    ]);
     db.save();
 
     // Run expiration scanner
@@ -398,7 +442,12 @@ describe('G015: Auto Authorization Mode', () => {
       group.id,
     ]);
 
-    db.run('INSERT INTO group_members (group_id, team_id, role, joined_at) VALUES (?, ?, ?, ?)', [group.id, teamB.id, 'member', 0]);
+    db.run('INSERT INTO group_members (group_id, team_id, role, joined_at) VALUES (?, ?, ?, ?)', [
+      group.id,
+      teamB.id,
+      'member',
+      0,
+    ]);
 
     const mB = await createMachine(app, 'MB');
     const aB = await createAgent(app, mB.id, 'Agent B', 'claude');
@@ -433,7 +482,12 @@ describe('G015: Auto Authorization Mode', () => {
       group.id,
     ]);
 
-    db.run('INSERT INTO group_members (group_id, team_id, role, joined_at) VALUES (?, ?, ?, ?)', [group.id, teamB.id, 'member', 0]);
+    db.run('INSERT INTO group_members (group_id, team_id, role, joined_at) VALUES (?, ?, ?, ?)', [
+      group.id,
+      teamB.id,
+      'member',
+      0,
+    ]);
 
     const mB = await createMachine(app, 'MB');
     const aB = await createAgent(app, mB.id, 'Agent B', 'claude');
@@ -463,7 +517,12 @@ describe('G016: Cross-Team Task Retry', () => {
     const teamB = await createTeam(app, 'Executor', 'user-b');
     const group = await createGroup(app, 'Retry Group', teamA.id);
 
-    db.run('INSERT INTO group_members (group_id, team_id, role, joined_at) VALUES (?, ?, ?, ?)', [group.id, teamB.id, 'member', 0]);
+    db.run('INSERT INTO group_members (group_id, team_id, role, joined_at) VALUES (?, ?, ?, ?)', [
+      group.id,
+      teamB.id,
+      'member',
+      0,
+    ]);
 
     const mB = await createMachine(app, 'MB');
     const aB = await createAgent(app, mB.id, 'Agent B', 'claude');
@@ -472,12 +531,12 @@ describe('G016: Cross-Team Task Retry', () => {
     db.run(
       `INSERT INTO tasks (id, title, status, creator_id, is_group_task, source_team_id, max_retries, retry_count, created_at)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-      ['task-retry-001', 'Retry Task', 'claimed', 'user-a', 1, teamA.id, 1, 1, Date.now()]
+      ['task-retry-001', 'Retry Task', 'claimed', 'user-a', 1, teamA.id, 1, 1, Date.now()],
     );
     db.run(
       `INSERT INTO group_tasks (task_id, group_id, source_team_id, authorization_status)
        VALUES (?, ?, ?, ?)`,
-      ['task-retry-001', group.id, teamA.id, 'approved']
+      ['task-retry-001', group.id, teamA.id, 'approved'],
     );
     db.save();
 
@@ -500,7 +559,12 @@ describe('G016: Cross-Team Task Retry', () => {
     const teamB = await createTeam(app, 'Executor', 'user-b');
     const group = await createGroup(app, 'Disconnect Group', teamA.id);
 
-    db.run('INSERT INTO group_members (group_id, team_id, role, joined_at) VALUES (?, ?, ?, ?)', [group.id, teamB.id, 'member', 0]);
+    db.run('INSERT INTO group_members (group_id, team_id, role, joined_at) VALUES (?, ?, ?, ?)', [
+      group.id,
+      teamB.id,
+      'member',
+      0,
+    ]);
 
     const mB = await createMachine(app, 'MB');
     const aB = await createAgent(app, mB.id, 'Agent B', 'claude');
@@ -509,24 +573,149 @@ describe('G016: Cross-Team Task Retry', () => {
     db.run(
       `INSERT INTO tasks (id, title, status, assignee_id, creator_id, is_group_task, source_team_id, created_at)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-      ['task-disconn-001', 'Disconnect Task', 'claimed', aB.id, 'user-a', 1, teamA.id, Date.now()]
+      ['task-disconn-001', 'Disconnect Task', 'claimed', aB.id, 'user-a', 1, teamA.id, Date.now()],
     );
     db.run(
       `INSERT INTO group_tasks (task_id, group_id, source_team_id, authorization_status)
        VALUES (?, ?, ?, ?)`,
-      ['task-disconn-001', group.id, teamA.id, 'approved']
+      ['task-disconn-001', group.id, teamA.id, 'approved'],
     );
     db.save();
 
     // Simulate disconnect by directly calling the release logic
     // In production this happens in ws.on('close') handler
-    db.run("UPDATE tasks SET status = 'pending', assignee_id = NULL WHERE id = ?", ['task-disconn-001']);
-    db.run("UPDATE group_tasks SET authorization_status = 'none' WHERE task_id = ?", ['task-disconn-001']);
+    db.run("UPDATE tasks SET status = 'pending', assignee_id = NULL WHERE id = ?", [
+      'task-disconn-001',
+    ]);
+    db.run("UPDATE group_tasks SET authorization_status = 'none' WHERE task_id = ?", [
+      'task-disconn-001',
+    ]);
     db.save();
 
     const taskRes = await app.inject({ method: 'GET', url: '/api/tasks/task-disconn-001' });
     const taskBody = JSON.parse(taskRes.payload);
     expect(taskBody.status).toBe('pending');
     expect(taskBody.assigneeId).toBeUndefined();
+  });
+});
+
+describe('G015: Reputation on group task completion/failure', () => {
+  it('TC-G015-001: completing a group task records positive reputation for executing team', async () => {
+    const { app, db } = await buildApp();
+    const teamA = await createTeam(app, 'Source', 'user-a');
+    const teamB = await createTeam(app, 'Executor', 'user-b');
+    const group = await createGroup(app, 'Rep Group', teamA.id);
+
+    db.run('INSERT INTO group_members (group_id, team_id, role, joined_at) VALUES (?, ?, ?, ?)', [
+      group.id,
+      teamB.id,
+      'member',
+      0,
+    ]);
+
+    const mB = await createMachine(app, 'MB');
+    const aB = await createAgent(app, mB.id, 'Agent B', 'claude');
+    // Agent must belong to executing team for reputation attribution
+    db.run('UPDATE agents SET team_id = ? WHERE id = ?', [teamB.id, aB.id]);
+    db.save();
+
+    const pubRes = await app.inject({
+      method: 'POST',
+      url: `/api/groups/${group.id}/tasks`,
+      payload: { title: 'Rep Task', source_team_id: teamA.id, creator_id: 'user-a' },
+    });
+    const task = JSON.parse(pubRes.payload);
+
+    const claimRes = await app.inject({
+      method: 'POST',
+      url: `/api/tasks/${task.id}/group-claim`,
+      payload: { agent_id: aB.id, team_id: teamB.id },
+    });
+    expect(claimRes.statusCode).toBe(200);
+    const claimBody = JSON.parse(claimRes.payload);
+
+    const approveRes = await app.inject({
+      method: 'POST',
+      url: `/api/authorizations/${claimBody.authorization_request_id}/approve`,
+    });
+    expect(approveRes.statusCode).toBe(200);
+
+    // Force complete the task
+    const completeRes = await app.inject({
+      method: 'POST',
+      url: `/api/tasks/${task.id}/force-complete`,
+    });
+    expect(completeRes.statusCode).toBe(200);
+    const completeBody = JSON.parse(completeRes.payload);
+    expect(completeBody.status).toBe('completed');
+
+    const score = getReputationScore(teamB.id, group.id);
+    expect(score).toBe(1);
+
+    const recordStmt = db.prepare(
+      'SELECT event_type, score_delta FROM reputation_records WHERE team_id = ? AND group_id = ? AND task_id = ?',
+    );
+    recordStmt.bind([teamB.id, group.id, task.id]);
+    expect(recordStmt.step()).toBe(true);
+    const record = recordStmt.getAsObject() as { event_type: string; score_delta: number };
+    recordStmt.free();
+    expect(record.event_type).toBe('task_completed');
+    expect(record.score_delta).toBe(1);
+  });
+
+  it('TC-G015-002: failing a group task records negative reputation for executing team', async () => {
+    const { app, db } = await buildApp();
+    const teamA = await createTeam(app, 'Source', 'user-a');
+    const teamB = await createTeam(app, 'Executor', 'user-b');
+    const group = await createGroup(app, 'Rep Fail Group', teamA.id);
+
+    db.run('INSERT INTO group_members (group_id, team_id, role, joined_at) VALUES (?, ?, ?, ?)', [
+      group.id,
+      teamB.id,
+      'member',
+      0,
+    ]);
+
+    const mB = await createMachine(app, 'MB');
+    const aB = await createAgent(app, mB.id, 'Agent B', 'claude');
+    db.run('UPDATE agents SET team_id = ? WHERE id = ?', [teamB.id, aB.id]);
+    db.save();
+
+    const pubRes = await app.inject({
+      method: 'POST',
+      url: `/api/groups/${group.id}/tasks`,
+      payload: { title: 'Rep Fail Task', source_team_id: teamA.id, creator_id: 'user-a' },
+    });
+    const task = JSON.parse(pubRes.payload);
+
+    const claimRes = await app.inject({
+      method: 'POST',
+      url: `/api/tasks/${task.id}/group-claim`,
+      payload: { agent_id: aB.id, team_id: teamB.id },
+    });
+    const claimBody = JSON.parse(claimRes.payload);
+
+    await app.inject({
+      method: 'POST',
+      url: `/api/authorizations/${claimBody.authorization_request_id}/approve`,
+    });
+
+    const failRes = await app.inject({ method: 'POST', url: `/api/tasks/${task.id}/force-fail` });
+    expect(failRes.statusCode).toBe(200);
+    const failBody = JSON.parse(failRes.payload);
+    expect(failBody.status).toBe('failed');
+
+    const score = getReputationScore(teamB.id, group.id);
+    expect(score).toBe(-1);
+
+    const recordStmt = db.prepare(
+      'SELECT event_type, score_delta FROM reputation_records WHERE team_id = ? AND group_id = ? AND task_id = ?',
+    );
+    recordStmt.bind([teamB.id, group.id, task.id]);
+    expect(recordStmt.step()).toBe(true);
+    const record = recordStmt.getAsObject() as { event_type: string; score_delta: number };
+    recordStmt.free();
+    expect(record.event_type).toBe('task_failed');
+    expect(record.score_delta).toBe(-1);
   });
 });

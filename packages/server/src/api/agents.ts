@@ -29,13 +29,15 @@ export async function registerAgentRoutes(app: FastifyInstance): Promise<void> {
 
     const db = getDatabase();
 
-    // Verify machine exists
-    const machineStmt = db.prepare('SELECT id FROM machines WHERE id = ?');
+    // Verify machine exists and fetch its team_id
+    const machineStmt = db.prepare('SELECT id, team_id FROM machines WHERE id = ?');
     machineStmt.bind([body.machineId]);
     if (!machineStmt.step()) {
       machineStmt.free();
       return reply.status(404).send({ error: 'Machine not found' });
     }
+    const machineRow = machineStmt.getAsObject() as { team_id: string | null };
+    const machineTeamId = machineRow.team_id;
     machineStmt.free();
 
     const id = crypto.randomUUID();
@@ -61,7 +63,18 @@ export async function registerAgentRoutes(app: FastifyInstance): Promise<void> {
     );
     db.save();
 
-    return reply.status(201).send({ id, name, runtime: body.runtime, capabilities, labels });
+    return reply.status(201).send({
+      id,
+      machineId: body.machineId,
+      teamId: machineTeamId,
+      name,
+      runtime: body.runtime,
+      status: 'sleeping',
+      roleCard,
+      capabilities,
+      labels,
+      currentTaskId: null,
+    });
   });
 
   // GET /api/agents — list agents
@@ -238,13 +251,17 @@ export function registerAgentWs(
 
   // Check if agent already exists for this machine (by name or same runtime)
   const existingStmt = db.prepare(
-    'SELECT id FROM agents WHERE machine_id = ? AND (name = ? OR runtime = ?)',
+    'SELECT id, labels FROM agents WHERE machine_id = ? AND (name = ? OR runtime = ?)',
   );
   existingStmt.bind([machineId, agentData.name, agentData.runtime]);
   if (existingStmt.step()) {
-    const row = existingStmt.getAsObject() as { id: string };
+    const row = existingStmt.getAsObject() as { id: string; labels: string };
     existingStmt.free();
-    // Update existing agent
+    // Preserve manually-assigned labels and team_id when daemon re-registers.
+    const existingLabels = JSON.parse(row.labels || '[]') as string[];
+    const incomingLabels = agentData.labels || [];
+    const mergedLabels = incomingLabels.length > 0 ? incomingLabels : existingLabels;
+    // Update existing agent (leave team_id untouched)
     db.run(
       'UPDATE agents SET name = ?, runtime = ?, role_card = ?, capabilities = ?, labels = ?, status = ?, last_wake_at = ? WHERE id = ?',
       [
@@ -252,7 +269,7 @@ export function registerAgentWs(
         agentData.runtime,
         JSON.stringify(agentData.roleCard),
         JSON.stringify(agentData.capabilities),
-        JSON.stringify(agentData.labels || []),
+        JSON.stringify(mergedLabels),
         'awake',
         Date.now(),
         row.id,

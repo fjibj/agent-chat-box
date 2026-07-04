@@ -25,18 +25,45 @@ export function useWebSocket(options: UseWebSocketOptions) {
   const [clientId] = useState<string | null>(() => getOrCreateHumanId());
   const wsRef = useRef<WebSocket | null>(null);
   const reconnectTimeoutRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  const activeRef = useRef(true);
+
+  const cleanup = useCallback(() => {
+    activeRef.current = false;
+    if (reconnectTimeoutRef.current) {
+      clearTimeout(reconnectTimeoutRef.current);
+      reconnectTimeoutRef.current = undefined;
+    }
+    if (wsRef.current) {
+      // Suppress expected close errors during unmount / React StrictMode remount.
+      wsRef.current.onerror = null;
+      wsRef.current.close();
+      wsRef.current = null;
+    }
+  }, []);
 
   const connect = useCallback(() => {
-    if (wsRef.current?.readyState === WebSocket.OPEN) return;
+    activeRef.current = true;
+
+    // Avoid creating multiple concurrent sockets (e.g. React StrictMode double mount).
+    const existing = wsRef.current;
+    if (existing && (existing.readyState === WebSocket.OPEN || existing.readyState === WebSocket.CONNECTING)) {
+      return;
+    }
 
     const ws = new WebSocket(url);
+    wsRef.current = ws;
 
     ws.onopen = () => {
+      if (!activeRef.current) {
+        ws.close();
+        return;
+      }
       setConnected(true);
       onConnect?.();
     };
 
     ws.onmessage = (e) => {
+      if (!activeRef.current) return;
       try {
         const msg: WSMessage = JSON.parse(e.data);
         // Note: clientId is now client-generated and stable (persisted in localStorage).
@@ -48,31 +75,26 @@ export function useWebSocket(options: UseWebSocketOptions) {
     };
 
     ws.onclose = () => {
+      if (wsRef.current === ws) {
+        wsRef.current = null;
+      }
+      if (!activeRef.current) return;
+
       setConnected(false);
       onDisconnect?.();
-      wsRef.current = null;
 
       if (autoReconnect) {
         reconnectTimeoutRef.current = setTimeout(connect, 3000);
       }
     };
 
-    ws.onerror = (err) => {
-      console.error('WebSocket error:', err);
-    };
-
-    wsRef.current = ws;
+    // Let onclose handle reconnection; logging here duplicates noise in StrictMode.
+    ws.onerror = () => {};
   }, [url, onMessage, onConnect, onDisconnect, autoReconnect]);
 
   const disconnect = useCallback(() => {
-    if (reconnectTimeoutRef.current) {
-      clearTimeout(reconnectTimeoutRef.current);
-    }
-    if (wsRef.current) {
-      wsRef.current.close();
-      wsRef.current = null;
-    }
-  }, []);
+    cleanup();
+  }, [cleanup]);
 
   const send = useCallback((msg: WSMessage) => {
     if (wsRef.current?.readyState === WebSocket.OPEN) {

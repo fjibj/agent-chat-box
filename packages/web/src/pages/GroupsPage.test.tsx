@@ -108,6 +108,13 @@ describe('G023: Group Management Page', () => {
           members: [{ team_id: 'team-default', team_name: 'My Team', role: 'owner' }],
         },
       ], // initial groups
+      {
+        id: 'g-1',
+        name: 'Alpha',
+        description: 'Alpha group',
+        owner_team_id: 'team-default',
+        members: [{ team_id: 'team-default', team_name: 'My Team', role: 'owner' }],
+      }, // GET /api/groups/g-1 (full details)
       { contract: { authorization: 'manual', trust_threshold: 0.5 } }, // GET contract
       [], // GET reputation
       { invite_code: 'XYZ789' }, // POST invite
@@ -144,6 +151,13 @@ describe('G023: Group Management Page', () => {
           members: [],
         },
       ], // initial groups
+      {
+        id: 'g-1',
+        name: 'Alpha',
+        description: 'Alpha group',
+        owner_team_id: 'team-default',
+        members: [],
+      }, // GET /api/groups/g-1 (full details)
       { contract: { authorization: 'manual', trust_threshold: 0.5 } }, // GET contract
       [], // GET reputation
       { success: true }, // PATCH contract
@@ -173,6 +187,104 @@ describe('G023: Group Management Page', () => {
           body: expect.stringContaining('auto'),
         }),
       );
+    });
+  });
+
+  it('TC-G023-006: delete group requires confirmation', async () => {
+    mockFetchSequence([
+      [
+        {
+          id: 'g-1',
+          name: 'Alpha',
+          description: 'Alpha group',
+          owner_team_id: 'team-default',
+          members: [{ team_id: 'team-default', team_name: 'My Team', role: 'owner' }],
+        },
+      ], // initial groups
+      {
+        id: 'g-1',
+        name: 'Alpha',
+        description: 'Alpha group',
+        owner_team_id: 'team-default',
+        members: [{ team_id: 'team-default', team_name: 'My Team', role: 'owner' }],
+      }, // GET /api/groups/g-1 (full details)
+      { contract: { authorization: 'manual', trust_threshold: 0.5 } }, // GET contract
+      [], // GET reputation
+      { success: true }, // DELETE /api/groups/g-1
+      [], // refetch after delete
+    ]);
+    const user = userEvent.setup();
+
+    await act(async () => {
+      render(<GroupsPage />);
+    });
+
+    await waitFor(() => screen.getByText('Alpha'));
+    await user.click(screen.getByText('Alpha'));
+
+    await waitFor(() => screen.getByText('Delete Group'));
+    await user.click(screen.getByText('Delete Group'));
+
+    // Confirmation dialog should appear
+    await waitFor(() => {
+      expect(screen.getByText('Delete Group?')).toBeDefined();
+      expect(screen.getByText(/This action cannot be undone/)).toBeDefined();
+    });
+
+    await user.click(screen.getByText('Delete'));
+
+    await waitFor(() => {
+      expect(global.fetch).toHaveBeenCalledWith(
+        '/api/groups/g-1',
+        expect.objectContaining({ method: 'DELETE' }),
+      );
+    });
+  });
+
+  it('TC-G023-007: switches team context', async () => {
+    mockFetchSequence([
+      [], // initial groups for team-default
+      [], // groups for team-b after switch
+    ]);
+    const user = userEvent.setup();
+
+    await act(async () => {
+      render(<GroupsPage />);
+    });
+
+    const teamInput = screen.getByPlaceholderText('Team ID');
+    await user.clear(teamInput);
+    await user.type(teamInput, 'team-b');
+    await user.click(screen.getByText('Switch'));
+
+    await waitFor(() => {
+      expect(global.fetch).toHaveBeenLastCalledWith('/api/groups?team_id=team-b');
+    });
+  });
+
+  it('TC-G023-008: shows error banner when create group fails', async () => {
+    (global.fetch as ReturnType<typeof vi.fn>).mockImplementation((input: RequestInfo | URL) => {
+      const url = input.toString();
+      if (url === '/api/groups') {
+        return Promise.resolve({
+          ok: false,
+          json: () => Promise.resolve({ error: 'Failed to create group' }),
+        } as Response);
+      }
+      return Promise.resolve({ json: () => Promise.resolve([]), ok: true } as Response);
+    });
+    const user = userEvent.setup();
+
+    await act(async () => {
+      render(<GroupsPage />);
+    });
+
+    await user.click(screen.getByText('+ New'));
+    await user.type(screen.getByPlaceholderText('Group name'), 'Bad Group');
+    await user.click(screen.getByText('Create'));
+
+    await waitFor(() => {
+      expect(screen.getByText('Failed to create group')).toBeDefined();
     });
   });
 });

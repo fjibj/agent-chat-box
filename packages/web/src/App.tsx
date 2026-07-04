@@ -136,7 +136,7 @@ export default function App() {
     setMessages(prev => [...prev.slice(-100), msg]);
   }, []);
 
-  const wsUrl = `ws://${window.location.host}/ws`;
+  const wsUrl = import.meta.env.VITE_WS_URL || `ws://${window.location.host}/ws`;
   const { connected, clientId, send } = useWebSocket({
     url: wsUrl,
     onMessage: handleMessage,

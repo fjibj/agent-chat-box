@@ -77,9 +77,10 @@ export async function registerAuthorizationRoutes(app: FastifyInstance): Promise
 
     try {
       // Approve: set task to claimed, assign to requesting agent
+      // claimed_at must be milliseconds (consistent with created_at and timeout checker)
       db.run(
         'UPDATE tasks SET status = ?, assignee_id = ?, claimed_at = ? WHERE id = ?',
-        ['claimed', ar.requesting_agent_id, now, ar.group_task_id]
+        ['claimed', ar.requesting_agent_id, Date.now(), ar.group_task_id]
       );
 
       // Update group_tasks

@@ -345,8 +345,14 @@ function migrate(db: DatabaseWrapper): void {
     // v8 → v9: add federation tables and agent labels
     console.log('[db] Migrating v8 → v9 (federation gateway)...');
 
-    // Add labels column to agents
-    db.exec(`ALTER TABLE agents ADD COLUMN labels TEXT DEFAULT '[]';`);
+    // Add labels column to agents only if it does not already exist
+    // (handles databases where the column was created but user_version was not bumped)
+    const agentsColumns = db
+      .exec(`PRAGMA table_info(agents)`)[0]
+      .values.map((row) => String(row[1]));
+    if (!agentsColumns.includes('labels')) {
+      db.exec(`ALTER TABLE agents ADD COLUMN labels TEXT DEFAULT '[]';`);
+    }
 
     // Create federation_peers table
     db.exec(`

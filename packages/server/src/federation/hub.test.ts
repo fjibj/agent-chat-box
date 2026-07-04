@@ -8,7 +8,9 @@ import {
   startHubHeartbeat,
   stopHubHeartbeat,
   indexGroupTask,
+  handleFederationConnection,
 } from './hub.js';
+import { buildFedMsg } from './protocol.js';
 
 /** Create a mock WebSocket for peer registration. */
 function createMockWs(): any {
@@ -245,6 +247,51 @@ describe('Federation Hub', () => {
 
       vi.useRealTimers();
       stopHubHeartbeat();
+    });
+  });
+
+  describe('Peer broadcasts', () => {
+    it('broadcasts federation.member.joined to existing peers on new registration', async () => {
+      const teamA = await createTeam(app, 'Team A', 'user-a');
+      const teamB = await createTeam(app, 'Team B', 'user-b');
+      const group = await createGroup(app, 'Broadcast Group', teamA.id);
+      const inviteCode = 'ABCD1234';
+
+      db.run('UPDATE groups SET invite_code = ? WHERE id = ?', [inviteCode, group.id]);
+      db.save();
+
+      // Register peer A manually as an existing peer
+      const wsA = createMockWs();
+      const peers = getPeers();
+      peers.set(teamA.id, {
+        ws: wsA,
+        teamId: teamA.id,
+        groupId: group.id,
+        labels: [],
+        lastHeartbeat: Date.now(),
+      });
+
+      // Connect peer B and send federation.register
+      const wsB = createMockWs();
+      handleFederationConnection(wsB);
+      const messageHandler = wsB.on.mock.calls.find((call: unknown[]) => call[0] === 'message')![1];
+      messageHandler(
+        Buffer.from(
+          JSON.stringify(
+            buildFedMsg('federation.register', 'hub', {
+              inviteCode,
+              teamId: teamB.id,
+              labels: [],
+            }),
+          ),
+        ),
+      );
+
+      expect(wsA.send).toHaveBeenCalled();
+      const calls = wsA.send.mock.calls.map((call: unknown[]) => JSON.parse(call[0] as string));
+      const joined = calls.find((msg: { type: string; data: { teamId: string } }) => msg.type === 'federation.member.joined');
+      expect(joined).toBeDefined();
+      expect(joined!.data.teamId).toBe(teamB.id);
     });
   });
 

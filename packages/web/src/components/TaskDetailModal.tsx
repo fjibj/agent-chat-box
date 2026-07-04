@@ -94,6 +94,7 @@ export function TaskDetailModal({ taskId, onClose, onUpdated, names }: TaskDetai
     if (!taskId) return;
     setLoading(true);
     setError('');
+    setReviewResult(null);
 
     Promise.all([
       fetch(`/api/tasks/${taskId}/timeline`).then(r => r.json()),

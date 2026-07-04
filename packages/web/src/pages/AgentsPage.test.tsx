@@ -47,4 +47,45 @@ describe('AgentsPage', () => {
       expect(JSON.parse(postCall![1]!.body as string).labels).toEqual(['python', 'review']);
     });
   });
+
+  it('shows empty state when no machines are registered', async () => {
+    (global.fetch as ReturnType<typeof vi.fn>).mockImplementation((input: RequestInfo | URL) => {
+      const url = input.toString();
+      if (url === '/api/machines') {
+        return Promise.resolve({ json: () => Promise.resolve({ machines: [] }) } as Response);
+      }
+      if (url === '/api/agents') {
+        return Promise.resolve({ json: () => Promise.resolve({ agents: [] }) } as Response);
+      }
+      return Promise.reject(new Error(`Unexpected fetch: ${url}`));
+    });
+
+    render(<AgentsPage />);
+
+    await waitFor(() => {
+      expect(screen.getByText('No machines registered. Register a machine first.')).toBeDefined();
+    });
+  });
+
+  it('shows Working label for agent with currentTaskId', async () => {
+    (global.fetch as ReturnType<typeof vi.fn>).mockImplementation((input: RequestInfo | URL) => {
+      const url = input.toString();
+      if (url === '/api/machines') {
+        return Promise.resolve({ json: () => Promise.resolve({ machines: [{ id: 'm1', name: 'Machine 1', status: 'online' }] }) } as Response);
+      }
+      if (url === '/api/agents') {
+        return Promise.resolve({
+          json: () => Promise.resolve({
+            agents: [{ id: 'a1', machineId: 'm1', name: 'Agent 1', runtime: 'claude', status: 'running', currentTaskId: 'task-1', labels: [] }],
+          }),
+        } as Response);
+      }
+      return Promise.reject(new Error(`Unexpected fetch: ${url}`));
+    });
+
+    render(<AgentsPage />);
+
+    await waitFor(() => expect(screen.getByText('Agent 1')).toBeDefined());
+    expect(screen.getByText('Working')).toBeDefined();
+  });
 });

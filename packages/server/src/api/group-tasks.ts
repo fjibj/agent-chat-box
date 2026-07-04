@@ -70,9 +70,11 @@ export async function registerGroupTaskRoutes(app: FastifyInstance): Promise<voi
 
     const taskId = crypto.randomUUID();
     const now = Math.floor(Date.now() / 1000);
+    const nowMs = Date.now();
 
     try {
       // Create task
+      // created_at uses milliseconds to stay consistent with other task creation paths
       db.run(
         `INSERT INTO tasks (id, title, description, priority, status, tags, creator_id, required_capabilities, is_group_task, source_team_id, timeout_seconds, created_at)
          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
@@ -88,7 +90,7 @@ export async function registerGroupTaskRoutes(app: FastifyInstance): Promise<voi
           1, // is_group_task
           body.source_team_id,
           body.timeout_seconds || 3600,
-          now,
+          nowMs,
         ]
       );
 
@@ -96,7 +98,7 @@ export async function registerGroupTaskRoutes(app: FastifyInstance): Promise<voi
       db.run(
         `INSERT INTO group_tasks (task_id, group_id, source_team_id, authorization_status, created_at)
          VALUES (?, ?, ?, ?, ?)`,
-        [taskId, gid, body.source_team_id, 'none', now]
+        [taskId, gid, body.source_team_id, 'none', nowMs]
       );
 
       db.save();
@@ -114,7 +116,7 @@ export async function registerGroupTaskRoutes(app: FastifyInstance): Promise<voi
         group_id: gid,
         source_team_id: body.source_team_id,
         status: 'pending',
-        created_at: now,
+        created_at: nowMs,
       });
     } catch (err) {
       const error = err as Error;
@@ -290,9 +292,10 @@ export async function registerGroupTaskRoutes(app: FastifyInstance): Promise<voi
         const meetsThreshold = checkThreshold(body.team_id, groupTask.group_id, trustThreshold);
         if (meetsThreshold) {
           // Auto-approve
+          // claimed_at must be milliseconds (consistent with created_at and timeout checker)
           db.run(
             'UPDATE tasks SET status = ?, assignee_id = ?, claimed_at = ? WHERE id = ?',
-            ['claimed', body.agent_id, now, tid]
+            ['claimed', body.agent_id, Date.now(), tid]
           );
           db.run(
             'UPDATE group_tasks SET authorization_status = ?, authorized_at = ? WHERE task_id = ?',

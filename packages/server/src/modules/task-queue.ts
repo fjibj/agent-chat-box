@@ -4,6 +4,7 @@ import { getDatabase } from '../db/index.js';
 import type { Task, CreateTaskInput, UpdateTaskInput, ClaimResult } from '@agent-chat-box/shared';
 import { broadcastToChannel, broadcastToGroup, sendTo } from '../ws/handler.js';
 import { TASK_TIMEOUT_CHECK_INTERVAL_MS } from '@agent-chat-box/shared';
+import { recordReputation } from './reputation.js';
 
 /** Get task by ID */
 export function getTask(taskId: string): Task | null {
@@ -45,9 +46,13 @@ export function getTask(taskId: string): Task | null {
       ? JSON.parse(row.required_capabilities as string)
       : undefined,
     isGroupTask: Boolean(row.is_group_task),
-    sourceTeamId: ((row.gt_source_team_id as string | null) ?? (row.source_team_id as string | null)) ?? undefined,
+    sourceTeamId:
+      (row.gt_source_team_id as string | null) ??
+      (row.source_team_id as string | null) ??
+      undefined,
     groupId: (row.group_id as string | null) ?? undefined,
-    authorizationStatus: (row.authorization_status as Task['authorizationStatus'] | null) ?? undefined,
+    authorizationStatus:
+      (row.authorization_status as Task['authorizationStatus'] | null) ?? undefined,
     output: (row.output as string | null) ?? undefined,
     timeoutSeconds: row.timeout_seconds as number,
     maxRetries: row.max_retries as number,
@@ -281,6 +286,15 @@ export function updateTask(taskId: string, input: UpdateTaskInput): Task | null 
 
   const task = getTask(taskId);
   if (task) {
+    // Record reputation for completed or finally-failed group tasks
+    const isFinalFailed = input.status === 'failed' && task.retryCount >= task.maxRetries;
+    if ((input.status === 'completed' || isFinalFailed) && task.isGroupTask) {
+      recordTaskReputation(
+        task.id,
+        input.status === 'completed' ? 'task_completed' : 'task_failed',
+      );
+    }
+
     // Auto-retry: if task failed and retries remain, reset to pending
     if (input.status === 'failed' && task.retryCount < task.maxRetries) {
       const db2 = getDatabase();
@@ -313,7 +327,11 @@ export function updateTask(taskId: string, input: UpdateTaskInput): Task | null 
       `);
       gtStmt2.bind([taskId]);
       if (gtStmt2.step()) {
-        const gtRow = gtStmt2.getAsObject() as { group_id: string; source_team_id: string; contract_yaml: string };
+        const gtRow = gtStmt2.getAsObject() as {
+          group_id: string;
+          source_team_id: string;
+          contract_yaml: string;
+        };
         gtStmt2.free();
 
         // Check visibility.task_output setting
@@ -341,7 +359,9 @@ export function updateTask(taskId: string, input: UpdateTaskInput): Task | null 
                 completed_at: task.completedAt,
                 source_agent_id: task.assigneeId,
               });
-              console.log(`[task] Group task ${taskId} output sent to decomposer (parent: ${task.parentTaskId})`);
+              console.log(
+                `[task] Group task ${taskId} output sent to decomposer (parent: ${task.parentTaskId})`,
+              );
             }
           }
         }
@@ -353,7 +373,9 @@ export function updateTask(taskId: string, input: UpdateTaskInput): Task | null 
     // Cross-team retry: if group task failed, reset to pending for re-claim
     if (input.status === 'failed' && task.retryCount >= task.maxRetries) {
       const db3 = getDatabase();
-      const gtStmt = db3.prepare('SELECT group_id, source_team_id FROM group_tasks WHERE task_id = ?');
+      const gtStmt = db3.prepare(
+        'SELECT group_id, source_team_id FROM group_tasks WHERE task_id = ?',
+      );
       gtStmt.bind([taskId]);
       if (gtStmt.step()) {
         const gt = gtStmt.getAsObject() as { group_id: string; source_team_id: string };
@@ -554,6 +576,29 @@ export function getTasksByChannel(channelId: string, status?: Task['status']): T
   stmt.free();
 
   return tasks;
+}
+
+/** Record reputation for a completed or failed group task */
+function recordTaskReputation(taskId: string, eventType: 'task_completed' | 'task_failed'): void {
+  const db = getDatabase();
+  const stmt = db.prepare(`
+    SELECT gt.group_id, a.team_id
+    FROM group_tasks gt
+    JOIN tasks t ON gt.task_id = t.id
+    LEFT JOIN agents a ON t.assignee_id = a.id
+    WHERE gt.task_id = ?
+  `);
+  stmt.bind([taskId]);
+
+  if (stmt.step()) {
+    const row = stmt.getAsObject() as { group_id: string; team_id: string | null };
+    stmt.free();
+    if (row.team_id) {
+      recordReputation(row.team_id, row.group_id, eventType, taskId);
+    }
+  } else {
+    stmt.free();
+  }
 }
 
 /** Get tasks assigned to an agent */

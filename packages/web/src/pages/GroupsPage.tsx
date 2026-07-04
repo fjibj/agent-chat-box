@@ -32,8 +32,10 @@ export function GroupsPage() {
   const [reputation, setReputation] = useState<Record<string, number>>({});
   const [inviteCode, setInviteCode] = useState('');
   const [joinCode, setJoinCode] = useState('');
-  const [teamId] = useState('team-default'); // Use default team for MVP
+  const [teamId, setTeamId] = useState(localStorage.getItem('acb-teamId') || 'team-default');
+  const [teamIdInput, setTeamIdInput] = useState(teamId);
   const [error, setError] = useState('');
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
 
   const fetchGroups = useCallback(() => {
     fetch(`/api/groups?team_id=${teamId}`)
@@ -42,12 +44,25 @@ export function GroupsPage() {
       .catch(console.error);
   }, [teamId]);
 
+  const switchTeam = () => {
+    const trimmed = teamIdInput.trim();
+    if (!trimmed) return;
+    localStorage.setItem('acb-teamId', trimmed);
+    setTeamId(trimmed);
+    setSelectedGroup(null);
+  };
+
   useEffect(() => {
     fetchGroups();
   }, [fetchGroups]);
 
   useEffect(() => {
     if (!selectedGroup) return;
+    // Fetch full group details (including members) since the list endpoint omits them.
+    fetch(`/api/groups/${selectedGroup.id}`)
+      .then(r => r.json())
+      .then((full: Group) => setSelectedGroup(prev => prev ? { ...prev, members: full.members } : prev))
+      .catch(console.error);
     fetch(`/api/groups/${selectedGroup.id}/contract`)
       .then(r => r.json())
       .then(data => setContract(data.contract))
@@ -58,7 +73,7 @@ export function GroupsPage() {
         setReputation(Object.fromEntries(rows.map(row => [row.team_id, row.total_score])));
       })
       .catch(() => setReputation({}));
-  }, [selectedGroup]);
+  }, [selectedGroup?.id]);
 
   const createGroup = () => {
     if (!newGroupName.trim()) return;
@@ -140,9 +155,13 @@ export function GroupsPage() {
       .then(r => {
         if (!r.ok) throw new Error('Failed to delete group');
         setSelectedGroup(null);
+        setShowDeleteConfirm(false);
         fetchGroups();
       })
-      .catch(err => setError(err.message));
+      .catch(err => {
+        setShowDeleteConfirm(false);
+        setError(err.message);
+      });
   };
 
   return (
@@ -153,6 +172,15 @@ export function GroupsPage() {
           <div className="flex items-center justify-between mb-3">
             <h2 className="text-lg font-bold">Groups</h2>
             <button onClick={() => setShowCreate(true)} className="px-3 py-1 bg-blue-600 rounded-lg text-sm hover:bg-blue-700">+ New</button>
+          </div>
+          <div className="flex gap-2 mb-3">
+            <input
+              value={teamIdInput}
+              onChange={e => setTeamIdInput(e.target.value)}
+              placeholder="Team ID"
+              className="flex-1 bg-gray-700 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+            />
+            <button onClick={switchTeam} className="px-3 py-1.5 bg-gray-600 rounded-lg text-sm hover:bg-gray-500">Switch</button>
           </div>
           <div className="flex gap-2">
             <input
@@ -181,6 +209,34 @@ export function GroupsPage() {
       {/* Main: Group detail */}
       <div className="flex-1 bg-gray-900 p-6 overflow-y-auto">
         {error && <div className="mb-4 p-3 bg-red-900/50 border border-red-700 rounded-lg text-red-200 text-sm">{error}</div>}
+
+        {showDeleteConfirm && selectedGroup && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60">
+            <div className="bg-gray-800 border border-gray-700 rounded-lg p-6 max-w-sm w-full mx-4 shadow-xl">
+              <h3 className="text-lg font-bold mb-2">Delete Group?</h3>
+              <p className="text-gray-300 text-sm mb-6">
+                This will permanently delete <span className="font-semibold text-white">{selectedGroup.name}</span>. This action cannot be undone.
+              </p>
+              <div className="flex justify-end gap-3">
+                <button
+                  onClick={() => setShowDeleteConfirm(false)}
+                  className="px-4 py-2 bg-gray-700 rounded-lg hover:bg-gray-600 text-sm"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={() => {
+                    setShowDeleteConfirm(false);
+                    deleteGroup();
+                  }}
+                  className="px-4 py-2 bg-red-900 rounded-lg hover:bg-red-800 text-sm"
+                >
+                  Delete
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
 
         {showCreate ? (
           <div className="max-w-md">
@@ -226,7 +282,7 @@ export function GroupsPage() {
                 )}
                 {selectedGroup.owner_team_id === teamId && (
                   <button
-                    onClick={deleteGroup}
+                    onClick={() => setShowDeleteConfirm(true)}
                     className="px-4 py-2 bg-red-900 rounded-lg hover:bg-red-800 text-sm"
                   >
                     Delete Group
