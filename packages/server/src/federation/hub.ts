@@ -3,12 +3,16 @@
 
 import { WebSocket } from 'ws';
 import type { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
+import crypto from 'crypto';
+import { MSG } from '@agent-chat-box/shared';
 import { getDatabase } from '../db/index.js';
+import { broadcastToTeam } from '../ws/handler.js';
 import {
   type FederationMessage,
   type FederationRegisterPayload,
   type FederationHeartbeatPayload,
   type FederationTaskClaimPayload,
+  type FederationTaskClaimResultPayload,
   type FederationMemberJoinedPayload,
   type FederationMemberLeftPayload,
   type FederationAgentWakePayload,
@@ -105,6 +109,11 @@ function registerPeer(ws: WebSocket, teamId: string, groupId: string, labels: st
   );
 
   console.log(`[federation-hub] Peer registered: ${teamId} (group: ${groupId}, total peers: ${peers.size})`);
+}
+
+/** Disconnect a peer by team id (used when a team leaves a group). */
+export function disconnectPeerByTeamId(teamId: string, reason: string): void {
+  disconnectPeer(teamId, reason);
 }
 
 function disconnectPeer(teamId: string, reason: string): void {
@@ -268,9 +277,134 @@ function handleFederationMessage(ws: WebSocket, raw: string): void {
   }
 }
 
+interface FederationClaimResult {
+  success: boolean;
+  error?: string;
+  statusCode?: number;
+  authorizationRequestId?: string;
+  status?: string;
+  autoApproved?: boolean;
+  groupId?: string;
+  sourceTeamId?: string;
+}
+
+/** Core claim logic shared by REST and WebSocket claim paths. */
+export function processFederationClaim(
+  taskId: string,
+  agentId: string,
+  teamId: string,
+): FederationClaimResult {
+  const db = getDatabase();
+  const now = Math.floor(Date.now() / 1000);
+  const authRequestId = crypto.randomUUID();
+
+  try {
+    db.run('BEGIN TRANSACTION');
+
+    const idxStmt = db.prepare(
+      `SELECT id, group_id, source_team_id FROM federation_task_index
+       WHERE task_id = ? AND status = 'open'`,
+    );
+    idxStmt.bind([taskId]);
+    if (!idxStmt.step()) {
+      idxStmt.free();
+      db.run('ROLLBACK');
+      return { success: false, error: 'Task is not available for federation claim', statusCode: 409 };
+    }
+    const indexRow = idxStmt.getAsObject() as { id: string; group_id: string; source_team_id: string };
+    idxStmt.free();
+
+    if (indexRow.source_team_id === teamId) {
+      db.run('ROLLBACK');
+      return { success: false, error: "Cannot claim your own team's task", statusCode: 400 };
+    }
+
+    db.run(
+      `UPDATE federation_task_index
+       SET status = 'claimed', claimed_by_team_id = ?, claimed_at = ?
+       WHERE id = ? AND status = 'open'`,
+      [teamId, now, indexRow.id],
+    );
+    const changes = db.exec('SELECT changes() as changes')[0]?.values[0][0] as number;
+    if (changes === 0) {
+      db.run('ROLLBACK');
+      return { success: false, error: 'Task is already claimed', statusCode: 409 };
+    }
+
+    db.run('UPDATE tasks SET status = ? WHERE id = ?', ['pending_authorization', taskId]);
+    db.run('UPDATE group_tasks SET authorization_status = ? WHERE task_id = ?', ['pending', taskId]);
+    db.run(
+      `INSERT INTO authorization_requests
+       (id, group_task_id, requesting_team_id, requesting_agent_id, status, created_at, expires_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?)`,
+      [authRequestId, taskId, teamId, agentId, 'pending', now, now + 300],
+    );
+
+    db.run('COMMIT');
+    db.save();
+
+    return {
+      success: true,
+      authorizationRequestId: authRequestId,
+      status: 'pending_authorization',
+      groupId: indexRow.group_id,
+      sourceTeamId: indexRow.source_team_id,
+    };
+  } catch (err) {
+    try {
+      db.run('ROLLBACK');
+    } catch {
+      // Ignore rollback errors.
+    }
+    const error = err as Error;
+    return { success: false, error: error.message, statusCode: 500 };
+  }
+}
+
 function handleClaim(ws: WebSocket, data: FederationTaskClaimPayload): void {
-  // TODO: Route claim to source team server (implemented in F006/F007)
-  console.log(`[federation-hub] Claim received: task=${data.taskId}, agent=${data.agentId}, team=${data.teamId}`);
+  if (!data.taskId || !data.agentId || !data.teamId) {
+    const result: FederationTaskClaimResultPayload = {
+      success: false,
+      error: 'task_id, agent_id, and team_id are required',
+    };
+    ws.send(JSON.stringify(buildFedMsg('federation.task.claim.result', 'hub', result, data.teamId)));
+    return;
+  }
+
+  const claimResult = processFederationClaim(data.taskId, data.agentId, data.teamId);
+
+  if (!claimResult.success) {
+    const result: FederationTaskClaimResultPayload = {
+      success: false,
+      error: claimResult.error,
+    };
+    sendToPeer(data.teamId, buildFedMsg('federation.task.claim.result', 'hub', result, data.teamId));
+    return;
+  }
+
+  const result: FederationTaskClaimResultPayload = {
+    success: true,
+    authorizationRequestId: claimResult.authorizationRequestId,
+    status: claimResult.status,
+    taskId: data.taskId,
+  };
+  sendToPeer(data.teamId, buildFedMsg('federation.task.claim.result', 'hub', result, data.teamId));
+
+  // Notify the source team that an authorization request has been created
+  if (claimResult.sourceTeamId) {
+    broadcastToTeam(claimResult.sourceTeamId, MSG.AUTHORIZATION_REQUESTED, {
+      authorizationRequestId: claimResult.authorizationRequestId,
+      taskId: data.taskId,
+      groupId: claimResult.groupId,
+      requestingTeamId: data.teamId,
+      requestingAgentId: data.agentId,
+      expiresAt: Math.floor(Date.now() / 1000) + 300,
+    });
+  }
+
+  console.log(
+    `[federation-hub] Claim routed: task=${data.taskId}, agent=${data.agentId}, team=${data.teamId}`,
+  );
 }
 
 // ---------------------------------------------------------------------------
@@ -419,66 +553,28 @@ export async function registerFederationHubRoutes(app: FastifyInstance): Promise
       return reply.status(400).send({ error: 'task_id, agent_id, and team_id are required' });
     }
 
-    const db = getDatabase();
-    const now = Math.floor(Date.now() / 1000);
-    const authRequestId = crypto.randomUUID();
-
-    try {
-      db.run('BEGIN TRANSACTION');
-
-      const idxStmt = db.prepare(
-        `SELECT id, group_id, source_team_id FROM federation_task_index
-         WHERE task_id = ? AND status = 'open'`,
-      );
-      idxStmt.bind([body.task_id]);
-      if (!idxStmt.step()) {
-        idxStmt.free();
-        db.run('ROLLBACK');
-        return reply.status(409).send({ error: 'Task is not available for federation claim' });
-      }
-      const indexRow = idxStmt.getAsObject() as { id: string; group_id: string; source_team_id: string };
-      idxStmt.free();
-
-      if (indexRow.source_team_id === body.team_id) {
-        db.run('ROLLBACK');
-        return reply.status(400).send({ error: 'Cannot claim your own team\'s task' });
-      }
-
-      db.run(
-        `UPDATE federation_task_index
-         SET status = 'claimed', claimed_by_team_id = ?, claimed_at = ?
-         WHERE id = ? AND status = 'open'`,
-        [body.team_id, now, indexRow.id],
-      );
-      const changes = db.exec('SELECT changes() as changes')[0]?.values[0][0] as number;
-      if (changes === 0) {
-        db.run('ROLLBACK');
-        return reply.status(409).send({ error: 'Task is already claimed' });
-      }
-
-      db.run('UPDATE tasks SET status = ? WHERE id = ?', ['pending_authorization', body.task_id]);
-      db.run('UPDATE group_tasks SET authorization_status = ? WHERE task_id = ?', ['pending', body.task_id]);
-      db.run(
-        `INSERT INTO authorization_requests
-         (id, group_task_id, requesting_team_id, requesting_agent_id, status, created_at, expires_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?)`,
-        [authRequestId, body.task_id, body.team_id, body.agent_id, 'pending', now, now + 300],
-      );
-
-      db.run('COMMIT');
-      db.save();
-
-      return {
-        success: true,
-        authorization_request_id: authRequestId,
-        status: 'pending_authorization',
-        expires_at: now + 300,
-      };
-    } catch (err) {
-      db.run('ROLLBACK');
-      const error = err as Error;
-      return reply.status(500).send({ error: error.message });
+    const result = processFederationClaim(body.task_id, body.agent_id, body.team_id);
+    if (!result.success) {
+      return reply.status(result.statusCode || 500).send({ error: result.error });
     }
+
+    if (result.sourceTeamId) {
+      broadcastToTeam(result.sourceTeamId, MSG.AUTHORIZATION_REQUESTED, {
+        authorizationRequestId: result.authorizationRequestId,
+        taskId: body.task_id,
+        groupId: result.groupId,
+        requestingTeamId: body.team_id,
+        requestingAgentId: body.agent_id,
+        expiresAt: Math.floor(Date.now() / 1000) + 300,
+      });
+    }
+
+    return {
+      success: true,
+      authorization_request_id: result.authorizationRequestId,
+      status: result.status,
+      expires_at: Math.floor(Date.now() / 1000) + 300,
+    };
   });
 }
 

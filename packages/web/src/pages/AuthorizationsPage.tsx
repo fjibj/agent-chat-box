@@ -1,4 +1,5 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
+import type { WSMessage } from '@agent-chat-box/shared';
 import { ReputationBadge } from '../components/ReputationBadge';
 
 interface AuthRequest {
@@ -14,11 +15,21 @@ interface AuthRequest {
   expires_at: number;
 }
 
-export function AuthorizationsPage() {
+export function AuthorizationsPage({ wsMessages }: { wsMessages?: WSMessage[] }) {
   const [pending, setPending] = useState<AuthRequest[]>([]);
   const [reputation, setReputation] = useState<Record<string, number>>({});
-  const [teamId] = useState('team-default');
+  const [teamId, setTeamId] = useState(localStorage.getItem('acb-teamId') || 'team-default');
+  const [teamIdInput, setTeamIdInput] = useState(teamId);
+  const [names, setNames] = useState<Record<string, string>>({});
   const [error, setError] = useState('');
+  const debounceRef = useRef<number | null>(null);
+
+  const switchTeam = () => {
+    const trimmed = teamIdInput.trim();
+    if (!trimmed) return;
+    localStorage.setItem('acb-teamId', trimmed);
+    setTeamId(trimmed);
+  };
 
   const fetchPending = useCallback(() => {
     fetch(`/api/authorizations/pending?team_id=${teamId}`)
@@ -32,6 +43,26 @@ export function AuthorizationsPage() {
     const interval = setInterval(fetchPending, 10_000);
     return () => clearInterval(interval);
   }, [fetchPending]);
+
+  // Refetch immediately when authorization lifecycle events arrive over WebSocket
+  useEffect(() => {
+    if (!wsMessages || wsMessages.length === 0) return;
+    const last = wsMessages[wsMessages.length - 1];
+    const relevantTypes = [
+      'authorization.requested',
+      'authorization.approved',
+      'authorization.rejected',
+      'authorization.expired',
+    ];
+    if (!relevantTypes.includes(last.type)) return;
+
+    if (debounceRef.current) {
+      window.clearTimeout(debounceRef.current);
+    }
+    debounceRef.current = window.setTimeout(() => {
+      fetchPending();
+    }, 300);
+  }, [wsMessages, fetchPending]);
 
   useEffect(() => {
     const pairs = pending
@@ -48,6 +79,19 @@ export function AuthorizationsPage() {
         .then(data => [requestingTeamId, data.total_score ?? 0] as const)
         .catch(() => [requestingTeamId, 0] as const),
     )).then(entries => setReputation(Object.fromEntries(entries)));
+  }, [pending]);
+
+  // Resolve requesting team names so we can display human-readable names
+  useEffect(() => {
+    const ids = new Set(pending.map(ar => ar.requesting_team_id).filter(Boolean));
+    if (ids.size === 0) {
+      setNames({});
+      return;
+    }
+    fetch(`/api/resolve-names?ids=${encodeURIComponent([...ids].join(','))}`)
+      .then(r => r.json())
+      .then(data => setNames(data.names || {}))
+      .catch(console.error);
   }, [pending]);
 
   const handleApprove = (id: string) => {
@@ -78,7 +122,28 @@ export function AuthorizationsPage() {
 
   return (
     <div className="p-6 max-w-4xl mx-auto">
-      <h2 className="text-2xl font-bold mb-6">Authorization Requests</h2>
+      <div className="flex items-start justify-between mb-6">
+        <h2 className="text-2xl font-bold">Authorization Requests</h2>
+        <div className="flex items-center gap-2">
+          <span className="text-sm text-gray-400">Team:</span>
+          <input
+            type="text"
+            value={teamIdInput}
+            onChange={e => setTeamIdInput(e.target.value)}
+            onKeyDown={e => {
+              if (e.key === 'Enter') switchTeam();
+            }}
+            className="w-64 px-3 py-1.5 bg-gray-700 text-white text-sm rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+            placeholder="team-id"
+          />
+          <button
+            onClick={switchTeam}
+            className="px-3 py-1.5 bg-blue-600 text-white text-sm rounded-lg hover:bg-blue-700 transition-colors"
+          >
+            Switch
+          </button>
+        </div>
+      </div>
       {error && <div className="mb-4 p-3 bg-red-900/50 border border-red-700 rounded-lg text-red-200 text-sm">{error}</div>}
 
       {pending.length === 0 ? (
@@ -98,8 +163,8 @@ export function AuthorizationsPage() {
               </div>
               <div className="flex items-center gap-4 mb-3 text-sm text-gray-400">
                 <span>Agent: {ar.agent_name} ({ar.agent_runtime})</span>
-                <span>Team: {ar.requesting_team_id.slice(0, 8)}...</span>
-                <span className="flex items-center gap-1">Reputation: <ReputationBadge score={reputation[ar.requesting_team_id] ?? 0} /></span>
+                <span>Team: {names[ar.requesting_team_id] || ar.requesting_team_id}</span>
+                <span className="flex items-center gap-1">Reputation: <ReputationBadge score={reputation[ar.requesting_team_id] ?? 0} groupId={ar.group_id} teamId={ar.requesting_team_id} /></span>
               </div>
               <div className="flex gap-3">
                 <button

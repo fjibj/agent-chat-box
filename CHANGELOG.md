@@ -43,6 +43,23 @@
 - 分层组织架构：Team → Group → Domain → World（当前实现 Group 层）
 - 协议设计预留递归性，支持未来 Domain/World 层扩展
 
+## [0.2.0-followup-patch] - 2026-07-05
+
+### 关闭人工验证剩余 7 个开放缺口（除 GAP-19 外）
+
+- **GAP-14 WebSocket 实时通知** — 补齐 authorization.requested/approved/rejected/expired、group.created/joined/left/contract.updated 的服务端广播与前端自动刷新
+- **GAP-15 Group Tasks 专属页面** — 新增 `/group-tasks` 路由与 `GroupTasksPage`，支持按群筛选任务
+- **GAP-16 + GAP-08 Authorizations 页面改进** — Team ID 切换器（localStorage 持久化）+ `/api/resolve-names` 完整团队名称显示
+- **GAP-06a ReputationBadge 详情弹窗** — 新增 `GET /api/groups/:gid/reputation/:tid/events` 与 `ReputationEventsModal`
+- **GAP-12a 联邦 WS claim 路由** — `hub.ts` 提取 `processFederationClaim`，实现 `federation.task.claim` 的 WS 处理与 `federation.task.claim.result` 响应
+- **GAP-13 退群任务清理** — leave 端点重置 claimed 任务、过期 pending auth requests、清理 `federation_task_index`、断开 Runner peer
+
+### 测试
+
+- 新增 7 个测试用例覆盖上述补丁
+- 根 76 + server 242 + web 44 = **362 个自动化测试**全部通过
+- typecheck / lint / quality:gates 通过
+
 ## [0.2.0-followup] - 2026-07-03
 
 ### UI 补齐（关闭人工验证发现的 14 个 GAP）

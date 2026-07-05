@@ -65,6 +65,32 @@ export function broadcast(msg: WSMessage): void {
   }
 }
 
+/** Broadcast a WSMessage to all authenticated clients belonging to a team. */
+export function broadcastToTeam(
+  teamId: string,
+  type: string,
+  data: unknown,
+  excludeId?: string,
+): void {
+  const clientIds = teamClients.get(teamId);
+  if (!clientIds) return;
+
+  const payload = JSON.stringify({
+    v: 1,
+    type,
+    ts: Date.now(),
+    data,
+  });
+
+  for (const clientId of clientIds) {
+    if (clientId === excludeId) continue;
+    const client = clients.get(clientId);
+    if (client?.authenticated && client.ws.readyState === WebSocket.OPEN) {
+      client.ws.send(payload);
+    }
+  }
+}
+
 /** Send error response to a client. */
 export function sendError(
   client: Client,
@@ -98,6 +124,9 @@ export function handleConnection(ws: WebSocket, type: 'human' | 'daemon'): Clien
   if (type === 'human') {
     autoJoinDefaultChannel(clientId);
   }
+
+  // Keep in-memory group membership map in sync with the database
+  refreshGroupTeamsMap();
 
   // Message handler
   ws.on('message', (data) => {
@@ -489,13 +518,18 @@ function handleHumanIdentify(client: Client, msg: WSMessage): void {
     return;
   }
 
-  const data = msg.data as { name?: string; client_id?: string };
+  const data = msg.data as { name?: string; client_id?: string; team_id?: string };
   if (!data.name || typeof data.name !== 'string' || data.name.trim().length === 0) {
     sendError(client, msg.id, 'INVALID_PAYLOAD', 'name is required');
     return;
   }
 
   client.name = data.name.trim();
+
+  // Map human clients to their selected team so team-scoped broadcasts can reach them
+  if (data.team_id && typeof data.team_id === 'string') {
+    updateTeamClientsMapping(client.id, data.team_id);
+  }
 
   // Use client-provided stable ID if available (for persistence across refreshes)
   if (data.client_id && typeof data.client_id === 'string' && data.client_id !== client.id) {

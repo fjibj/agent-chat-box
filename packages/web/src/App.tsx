@@ -10,6 +10,7 @@ import { TaskBoard } from './components/TaskBoard';
 import { AgentsPage } from './pages/AgentsPage';
 import { SettingsPage } from './pages/SettingsPage';
 import { GroupsPage } from './pages/GroupsPage';
+import { GroupTasksPage } from './pages/GroupTasksPage';
 import { AuthorizationsPage } from './pages/AuthorizationsPage';
 import { requestNotificationPermission, setNavigationCallback, notifyTaskComplete, notifyMention } from './utils/notifications';
 
@@ -72,8 +73,8 @@ function ChatPage({ wsMessages, send, clientId }: { wsMessages: WSMessage[]; sen
   );
 }
 
-function TasksPage() {
-  return <TaskBoard />;
+function TasksPage({ wsMessages }: { wsMessages?: WSMessage[] }) {
+  return <TaskBoard wsMessages={wsMessages} />;
 }
 
 // Navigation
@@ -150,7 +151,11 @@ export default function App() {
         v: 1,
         type: 'human.identify',
         ts: Date.now(),
-        data: { name: userName, client_id: clientId },
+        data: {
+          name: userName,
+          client_id: clientId,
+          team_id: localStorage.getItem('acb-teamId') || 'team-default',
+        },
       });
     }
   }, [connected, userName, send, clientId]);
@@ -181,6 +186,7 @@ export default function App() {
             <nav className="flex space-x-2">
               <NavLink to="/">Chat</NavLink>
               <NavLink to="/tasks">Tasks</NavLink>
+              <NavLink to="/group-tasks">Group Tasks</NavLink>
               <NavLink to="/groups">Groups</NavLink>
               <NavLink to="/authorizations">Authorizations</NavLink>
               <NavLink to="/agents">Agents</NavLink>
@@ -193,9 +199,10 @@ export default function App() {
         <main className="flex-1 flex min-h-0">
           <Routes>
             <Route path="/" element={<ChatPage wsMessages={messages} send={send} clientId={clientId} />} />
-            <Route path="/tasks" element={<TasksPage />} />
-            <Route path="/groups" element={<GroupsPage />} />
-            <Route path="/authorizations" element={<AuthorizationsPage />} />
+            <Route path="/tasks" element={<TasksPage wsMessages={messages} />} />
+            <Route path="/group-tasks" element={<GroupTasksPage wsMessages={messages} />} />
+            <Route path="/groups" element={<GroupsPage wsMessages={messages} />} />
+            <Route path="/authorizations" element={<AuthorizationsPage wsMessages={messages} />} />
             <Route path="/agents" element={<AgentsPage />} />
             <Route path="/settings" element={<SettingsPage />} />
           </Routes>

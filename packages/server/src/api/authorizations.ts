@@ -1,5 +1,7 @@
 import type { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
+import { MSG } from '@agent-chat-box/shared';
 import { getDatabase } from '../db/index.js';
+import { broadcastToTeam } from '../ws/handler.js';
 
 /** Register authorization API routes */
 export async function registerAuthorizationRoutes(app: FastifyInstance): Promise<void> {
@@ -97,12 +99,32 @@ export async function registerAuthorizationRoutes(app: FastifyInstance): Promise
 
       db.save();
 
+      // Resolve source team id for notification routing
+      const gtStmt = db.prepare('SELECT source_team_id FROM group_tasks WHERE task_id = ?');
+      gtStmt.bind([ar.group_task_id]);
+      let sourceTeamId: string | undefined;
+      if (gtStmt.step()) {
+        sourceTeamId = (gtStmt.getAsObject() as { source_team_id: string }).source_team_id;
+      }
+      gtStmt.free();
+
+      const approvedPayload = {
+        authorizationRequestId: id,
+        taskId: ar.group_task_id,
+        requestingTeamId: ar.requesting_team_id,
+        requestingAgentId: ar.requesting_agent_id,
+      };
+      broadcastToTeam(ar.requesting_team_id, MSG.AUTHORIZATION_APPROVED, approvedPayload);
+      if (sourceTeamId) {
+        broadcastToTeam(sourceTeamId, MSG.AUTHORIZATION_APPROVED, approvedPayload);
+      }
+
       try {
         const { wakeFederationAgent } = await import('../federation/hub.js');
         wakeFederationAgent(ar.requesting_team_id, ar.requesting_agent_id, ar.group_task_id, {
           title: 'Federation task approved',
           requiredLabels: [],
-          sourceTeamId: '',
+          sourceTeamId: sourceTeamId || '',
         });
       } catch {
         // Ignore wake failures; the task remains claimed and can be polled/recovered.
@@ -159,7 +181,25 @@ export async function registerAuthorizationRoutes(app: FastifyInstance): Promise
 
       db.save();
 
-      // TODO: Send WebSocket authorization.rejected to requesting team
+      // Resolve source team id for notification routing
+      const gtStmt = db.prepare('SELECT source_team_id FROM group_tasks WHERE task_id = ?');
+      gtStmt.bind([ar.group_task_id]);
+      let sourceTeamId: string | undefined;
+      if (gtStmt.step()) {
+        sourceTeamId = (gtStmt.getAsObject() as { source_team_id: string }).source_team_id;
+      }
+      gtStmt.free();
+
+      const rejectedPayload = {
+        authorizationRequestId: id,
+        taskId: ar.group_task_id,
+        requestingTeamId: ar.requesting_team_id,
+        requestingAgentId: ar.requesting_agent_id,
+      };
+      broadcastToTeam(ar.requesting_team_id, MSG.AUTHORIZATION_REJECTED, rejectedPayload);
+      if (sourceTeamId) {
+        broadcastToTeam(sourceTeamId, MSG.AUTHORIZATION_REJECTED, rejectedPayload);
+      }
 
       return { success: true, status: 'rejected' };
     } catch (err) {
@@ -174,16 +214,30 @@ export function checkExpiredAuthorizations(): void {
   const db = getDatabase();
   const now = Math.floor(Date.now() / 1000);
 
-  // Find expired pending requests
+  // Find expired pending requests together with team ids for notification routing
   const stmt = db.prepare(`
-    SELECT id, group_task_id FROM authorization_requests
-    WHERE status = 'pending' AND expires_at < ?
+    SELECT ar.id, ar.group_task_id, ar.requesting_team_id, gt.source_team_id
+    FROM authorization_requests ar
+    JOIN group_tasks gt ON ar.group_task_id = gt.task_id
+    WHERE ar.status = 'pending' AND ar.expires_at < ?
   `);
   stmt.bind([now]);
 
-  const expired: Array<{ id: string; group_task_id: string }> = [];
+  const expired: Array<{
+    id: string;
+    group_task_id: string;
+    requesting_team_id: string;
+    source_team_id: string;
+  }> = [];
   while (stmt.step()) {
-    expired.push(stmt.getAsObject() as { id: string; group_task_id: string });
+    expired.push(
+      stmt.getAsObject() as {
+        id: string;
+        group_task_id: string;
+        requesting_team_id: string;
+        source_team_id: string;
+      },
+    );
   }
   stmt.free();
 
@@ -192,10 +246,17 @@ export function checkExpiredAuthorizations(): void {
     db.run('UPDATE group_tasks SET authorization_status = ? WHERE task_id = ?', ['expired', ar.group_task_id]);
     db.run('UPDATE tasks SET status = ? WHERE id = ?', ['pending', ar.group_task_id]);
     console.log(`[auth] Authorization expired: ${ar.id} for task ${ar.group_task_id}`);
+
+    const expiredPayload = {
+      authorizationRequestId: ar.id,
+      taskId: ar.group_task_id,
+      requestingTeamId: ar.requesting_team_id,
+    };
+    broadcastToTeam(ar.requesting_team_id, MSG.AUTHORIZATION_EXPIRED, expiredPayload);
+    broadcastToTeam(ar.source_team_id, MSG.AUTHORIZATION_EXPIRED, expiredPayload);
   }
 
   if (expired.length > 0) {
     db.save();
-    // TODO: Send WebSocket authorization.expired notifications
   }
 }

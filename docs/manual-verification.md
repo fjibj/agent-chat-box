@@ -1065,20 +1065,20 @@ sqlite3 data/agent-chat-box.sqlite \
 | GAP-11 | Settings 页 version 硬编码 0.1.0                      | Q001 / 工程化：`/api/server-info` 动态读取根 package.json                   |
 | GAP-12 | hub.ts `POST /api/federation/claim` 返回 mock         | F012：实现真实 claim 与并发控制                                             |
 | GAP-17 | task_completed 未自动增加执行团队信誉分               | `task-queue.ts` 完成群任务时调用 `recordReputation('task_completed', ...)`  |
-| GAP-18 | task_failed 未自动降低执行团队信誉分                  | `task-queue.ts` 最终失败群任务时调用 `recordReputation('task_failed', ...)` |
+| GAP-18 | task_failed 未自动降低执行团队信誉分                  | `task-queue.ts` 最终失败群任务时调用 `recordReputation('task_failed', ...)`  |
+| GAP-14 | 多处 WebSocket 通知 TODO                                              | 补齐 authorization/group 事件的服务端广播与前端 WS 响应                     |
+| GAP-15 | 无 Group Tasks 专属页面                                               | 新增 `GroupTasksPage` + `TaskBoard` `groupId` prop + 导航入口               |
+| GAP-16 | Authorizations 页面 team_id 写死为 `team-default`                     | 增加 Team ID 切换器（localStorage 持久化）                                  |
+| GAP-06a | ReputationBadge 点击无详情弹窗（事件列表）                            | 新增 `GET /api/groups/:gid/reputation/:tid/events` + `ReputationEventsModal` |
+| GAP-08 | Authorizations 页 team_id 截断显示                                    | 调用 `/api/resolve-names` 显示完整团队名称                                  |
+| GAP-12a | hub.ts `handleClaim` WebSocket 路由仍只 console.log                   | 提取 `processFederationClaim` + 实现 WS claim 路由与 result 响应            |
+| GAP-13 | groups.ts leave 注释 TODO："Reset claimed tasks back to pending pool" | 退群时清理 claimed 任务、过期 auth requests、联邦索引、断开 peer           |
 
 ### 仍开放的缺口
 
 | 编号    | 缺口描述                                                              | 严重度 | 影响范围                                  | 建议                      |
 | ------- | --------------------------------------------------------------------- | ------ | ----------------------------------------- | ------------------------- |
-| GAP-14  | 多处 WebSocket 通知 TODO                                              | 中     | authorization.requested/approved 等靠轮询 | v0.3.0 实时性增强         |
-| GAP-15  | 无 Group Tasks 专属页面                                               | 中     | 群任务混在 Tasks 看板，来源不够直观       | v0.3.0 可选               |
-| GAP-16  | Authorizations 页面 team_id 写死为 `team-default`                     | 中     | 多团队审批方切换需 hardcode               | v0.3.0 RBAC / 团队切换    |
 | GAP-19  | 创建群时未自动创建群聊频道                                            | 中     | 群成员无法直接在统一频道聊天              | v0.3.0 群聊天频道自动创建 |
-| GAP-06a | ReputationBadge 点击无详情弹窗（事件列表）                            | 低     | 用户无法查看信誉分明细                    | v0.3.0 可选               |
-| GAP-08  | Authorizations 页 team_id 截断显示                                    | 低     | 团队识别困难                              | v0.3.0 UI polish          |
-| GAP-12a | hub.ts `handleClaim` WebSocket 路由仍只 console.log                   | 低     | WS 路径联邦 claim 未完整                  | 待实际需求确认            |
-| GAP-13  | groups.ts leave 注释 TODO："Reset claimed tasks back to pending pool" | 低     | 退群后任务清理可能不完全                  | v0.3.0 数据清理           |
 
 ---
 
@@ -1098,13 +1098,14 @@ sqlite3 data/agent-chat-box.sqlite \
 
 ### 补充说明
 
-- **执行结果**：附录 A~M 共 206 个验证项已全部执行，其中 **186 项通过 ✅、2 项失败 ❌、0 项跳过 ⏭️**。
-- **失败项性质**：2 个失败项均为**已知非阻塞性开放缺口**，不影响当前 v0.2.0 发版核心流程：
-  - M8-15 / GAP-12a：`hub.ts` WebSocket `handleClaim` 仍只 `console.log`，但 REST `/api/federation/claim` 路径已完整实现。
-  - M10-01 / GAP-19：创建群时未自动创建群聊频道，属于设计缺口而非功能缺陷。
-- **建议决策**：推荐 **CONDITIONAL GO** — 14 个 v0.2.0 follow-up GAP 已全部关闭，剩余 8 个开放缺口已记录并给出 v0.3.0 修复建议，当前无阻塞缺陷。
-- **自动化测试**：根 76 + server 239 + web 40 = 355 用例全部通过；typecheck 通过；lint 0 errors。
-- **回归测试建议**：v0.3.0 修复 GAP-14（WebSocket 实时通知）后，需回归 Authorizations 页面自动刷新与 federation.member.joined/left 广播的端到端链路。
+- **执行结果**：附录 A~M 共 206 个验证项已全部执行，其中 **186 项通过 ✅、2 项失败 ❌、0 项跳过 ⏭️**。后续补丁关闭 7 个开放缺口（除 GAP-19 外）。
+- **已关闭缺口（7 个）**：GAP-14 / GAP-15 / GAP-16 / GAP-06a / GAP-08 / GAP-12a / GAP-13。
+- **剩余开放缺口（1 个）**：GAP-19 — 创建群时未自动创建群聊频道，属于设计缺口而非功能缺陷。
+- **建议决策**：推荐 **CONDITIONAL GO** — 14 个 v0.2.0 follow-up GAP 与 7 个后续补丁 GAP 已全部关闭，剩余 1 个开放缺口（GAP-19）已记录并给出 v0.3.0 修复建议，当前无阻塞缺陷。
+- **自动化测试**：根 76 + server 242 + web 44 = 362 用例全部通过；typecheck 通过；lint 0 errors（54 warnings，均为既有）。
+- **回归测试建议**：
+  - v0.3.0 修复 GAP-19（群聊频道自动创建）后，需回归 Groups 创建流程与 Chat 页面成员列表。
+  - GAP-14 已落地，建议回归 Authorizations 页面实时出现/消失、Groups 页面成员实时更新、TaskBoard 实时状态流转。
 
 ---
 
@@ -1123,4 +1124,5 @@ sqlite3 data/agent-chat-box.sqlite \
 | 2026-07-04 | M3/M5/M8 跳过项补测             | 补充 AgentsPage 空态/Working、Authorizations 倒计时红色、Hub member.joined/heartbeat 测试                         | ✅    |
 | 2026-07-04 | M9 Tasks 页面交互               | 18 项全部验证通过；新增 TaskDetailModal/TaskBoard/TaskCard 测试覆盖群任务展示、状态流转、Force Override、子任务树 | ✅    |
 | 2026-07-04 | M10 跨团队聊天                  | 4 项通过（MemberList/@mention/消息发送/名称解析）；1 项失败 M10-01（设计缺口：无自动群聊频道）                    | ✅/❌ |
+| 2026-07-04 | 后续补丁：关闭 7 个开放缺口     | GAP-14/15/16/06a/08/12a/13 已实现并补测试；typecheck/tests/lint/quality:gates 通过；docs 更新                 | ✅    |
 |            | ...                             |                                                                                                                   |       |

@@ -287,4 +287,73 @@ describe('G009: Leave Group', () => {
     const memberIds = grp.members.map((m: { team_id: string }) => m.team_id);
     expect(memberIds).not.toContain(teamB.id);
   });
+
+  it('TC-G009-002 (GAP-13): leaving resets claimed tasks and expires pending auth requests', async () => {
+    const { app, db } = await buildApp();
+    const teamA = await createTeam(app, 'Team A', 'user-a');
+    const teamB = await createTeam(app, 'Team B', 'user-b');
+    const group = await createGroup(app, 'Collaboration', teamA.id);
+
+    // Add team B to group
+    db.run('INSERT INTO group_members (group_id, team_id, role, joined_at) VALUES (?, ?, ?, ?)', [
+      group.id, teamB.id, 'member', Math.floor(Date.now() / 1000),
+    ]);
+
+    // Register an agent for team B
+    const agentId = 'agent-b-001';
+    db.run(
+      `INSERT INTO agents (id, name, runtime, team_id, status, labels)
+       VALUES (?, ?, ?, ?, ?, ?)`,
+      [agentId, 'Agent B', 'claude', teamB.id, 'awake', '[]']
+    );
+
+    // Create a claimed group task assigned to team B's agent
+    const taskId = 'task-claimed-001';
+    db.run(
+      `INSERT INTO tasks (id, title, status, assignee_id, creator_id, is_group_task, source_team_id, created_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+      [taskId, 'Claimed Task', 'claimed', agentId, 'user-a', 1, teamA.id, Date.now()]
+    );
+    db.run(
+      `INSERT INTO group_tasks (task_id, group_id, source_team_id, authorization_status)
+       VALUES (?, ?, ?, ?)`,
+      [taskId, group.id, teamA.id, 'approved']
+    );
+
+    // Create a pending authorization request from team B
+    const authId = 'auth-001';
+    const now = Math.floor(Date.now() / 1000);
+    db.run(
+      `INSERT INTO authorization_requests (id, group_task_id, requesting_team_id, requesting_agent_id, status, created_at, expires_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?)`,
+      [authId, taskId, teamB.id, agentId, 'pending', now, now + 300]
+    );
+    db.run("UPDATE group_tasks SET authorization_status = 'pending' WHERE task_id = ?", [taskId]);
+    db.run("UPDATE tasks SET status = 'pending_authorization' WHERE id = ?", [taskId]);
+
+    // Team B leaves
+    const leaveRes = await app.inject({
+      method: 'POST',
+      url: `/api/groups/${group.id}/leave`,
+      payload: { team_id: teamB.id },
+    });
+    expect(leaveRes.statusCode).toBe(200);
+
+    // Verify task is back in pending pool
+    const taskStmt = db.prepare('SELECT status, assignee_id FROM tasks WHERE id = ?');
+    taskStmt.bind([taskId]);
+    taskStmt.step();
+    const taskRow = taskStmt.getAsObject() as { status: string; assignee_id: string | null };
+    taskStmt.free();
+    expect(taskRow.status).toBe('pending');
+    expect(taskRow.assignee_id).toBeNull();
+
+    // Verify auth request is expired
+    const authStmt = db.prepare('SELECT status FROM authorization_requests WHERE id = ?');
+    authStmt.bind([authId]);
+    authStmt.step();
+    const authRow = authStmt.getAsObject() as { status: string };
+    authStmt.free();
+    expect(authRow.status).toBe('expired');
+  });
 });

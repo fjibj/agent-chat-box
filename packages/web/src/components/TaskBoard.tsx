@@ -1,4 +1,5 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
+import type { WSMessage } from '@agent-chat-box/shared';
 import { TaskCard } from './TaskCard';
 import { CreateTaskModal } from './CreateTaskModal';
 import { TaskDetailModal } from './TaskDetailModal';
@@ -29,12 +30,19 @@ interface Column {
   tasks: Task[];
 }
 
-export function TaskBoard() {
+export function TaskBoard({
+  groupId,
+  wsMessages,
+}: {
+  groupId?: string;
+  wsMessages?: WSMessage[];
+}) {
   const [tasks, setTasks] = useState<Task[]>([]);
   const [names, setNames] = useState<Record<string, string>>({});
   const [searchQuery, setSearchQuery] = useState('');
   const [showCreate, setShowCreate] = useState(false);
   const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null);
+  const debounceRef = useRef<number | null>(null);
 
   const fetchNames = useCallback((taskList: Task[]) => {
     const ids = new Set<string>();
@@ -52,19 +60,46 @@ export function TaskBoard() {
   }, []);
 
   const fetchTasks = useCallback(() => {
-    fetch('/api/tasks')
+    const url = groupId ? `/api/groups/${groupId}/tasks` : '/api/tasks';
+    fetch(url)
       .then(res => res.json())
       .then(data => {
-        const taskList = data.tasks || [];
+        const taskList = data.tasks || data || [];
         setTasks(taskList);
         fetchNames(taskList);
       })
       .catch(console.error);
-  }, [fetchNames]);
+  }, [fetchNames, groupId]);
 
   useEffect(() => {
     fetchTasks();
   }, [fetchTasks]);
+
+  // Refetch when relevant WebSocket messages arrive
+  useEffect(() => {
+    if (!wsMessages || wsMessages.length === 0) return;
+    const last = wsMessages[wsMessages.length - 1];
+    const relevantTypes = [
+      'task.created',
+      'task.claimed',
+      'task.updated',
+      'task.completed',
+      'task.failed',
+      'authorization.requested',
+      'authorization.approved',
+      'authorization.rejected',
+      'authorization.expired',
+      'group.task.created',
+    ];
+    if (!relevantTypes.includes(last.type)) return;
+
+    if (debounceRef.current) {
+      window.clearTimeout(debounceRef.current);
+    }
+    debounceRef.current = window.setTimeout(() => {
+      fetchTasks();
+    }, 300);
+  }, [wsMessages, fetchTasks]);
 
   // Filter tasks — only show root tasks (no parentTaskId) on the board
   const rootTasks = tasks.filter(t => !t.parentTaskId);
@@ -131,7 +166,7 @@ export function TaskBoard() {
     <div className="flex-1 flex flex-col">
       {/* Header */}
       <div className="p-4 border-b border-gray-700 flex items-center justify-between">
-        <h2 className="text-lg font-semibold">Task Board</h2>
+        <h2 className="text-lg font-semibold">{groupId ? 'Group Task Board' : 'Task Board'}</h2>
         <div className="flex space-x-3">
           <input
             type="text"

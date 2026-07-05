@@ -1,7 +1,10 @@
 import type { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
 import crypto from 'crypto';
 import yaml from 'js-yaml';
+import { MSG } from '@agent-chat-box/shared';
 import { getDatabase } from '../db/index.js';
+import { broadcastToGroup, refreshGroupTeamsMap } from '../ws/handler.js';
+import { disconnectPeerByTeamId } from '../federation/hub.js';
 
 /** Default group contract template */
 const DEFAULT_CONTRACT_YAML = `# Group Contract
@@ -62,6 +65,13 @@ export async function registerGroupRoutes(app: FastifyInstance): Promise<void> {
       );
 
       db.save();
+
+      refreshGroupTeamsMap();
+      broadcastToGroup(groupId, MSG.GROUP_CREATED, {
+        groupId,
+        name: body.name.trim(),
+        ownerTeamId: body.owner_team_id,
+      });
 
       return reply.status(201).send({
         id: groupId,
@@ -261,7 +271,10 @@ export async function registerGroupRoutes(app: FastifyInstance): Promise<void> {
       db.run('UPDATE groups SET contract_yaml = ? WHERE id = ?', [contractYaml, id]);
       db.save();
 
-      // TODO: Send WebSocket notification to group members (group.contract.updated)
+      broadcastToGroup(id, MSG.GROUP_CONTRACT_UPDATED, {
+        groupId: id,
+        contract,
+      });
 
       return { success: true };
     } catch (err) {
@@ -376,7 +389,12 @@ export async function registerGroupRoutes(app: FastifyInstance): Promise<void> {
 
       db.save();
 
-      // TODO: Send WebSocket notification (group.joined)
+      refreshGroupTeamsMap();
+      broadcastToGroup(group.id, MSG.GROUP_JOINED, {
+        groupId: group.id,
+        teamId: body.team_id,
+        role: 'member',
+      });
 
       return { success: true, group_id: group.id };
     } catch (err) {
@@ -412,17 +430,97 @@ export async function registerGroupRoutes(app: FastifyInstance): Promise<void> {
     }
 
     try {
+      db.run('BEGIN TRANSACTION');
+
+      // Release group tasks claimed by the leaving team's agents back to the pending pool
+      const claimedStmt = db.prepare(`
+        SELECT t.id FROM tasks t
+        JOIN group_tasks gt ON t.id = gt.task_id
+        WHERE gt.group_id = ? AND t.assignee_id IN (
+          SELECT id FROM agents WHERE team_id = ?
+        ) AND t.status IN ('claimed', 'running')
+      `);
+      claimedStmt.bind([id, body.team_id]);
+      const claimedTaskIds: string[] = [];
+      while (claimedStmt.step()) {
+        const row = claimedStmt.getAsObject() as { id: string };
+        claimedTaskIds.push(row.id);
+      }
+      claimedStmt.free();
+
+      for (const taskId of claimedTaskIds) {
+        db.run("UPDATE tasks SET status = 'pending', assignee_id = NULL WHERE id = ?", [taskId]);
+        db.run("UPDATE group_tasks SET authorization_status = 'none' WHERE task_id = ?", [taskId]);
+      }
+
+      // Expire pending authorization requests initiated by the leaving team
+      const now = Math.floor(Date.now() / 1000);
+      const pendingAuthStmt = db.prepare(`
+        SELECT ar.id, ar.group_task_id FROM authorization_requests ar
+        JOIN group_tasks gt ON ar.group_task_id = gt.task_id
+        WHERE gt.group_id = ? AND ar.requesting_team_id = ? AND ar.status = 'pending'
+      `);
+      pendingAuthStmt.bind([id, body.team_id]);
+      const pendingAuthRows: Array<{ id: string; group_task_id: string }> = [];
+      while (pendingAuthStmt.step()) {
+        pendingAuthRows.push(pendingAuthStmt.getAsObject() as { id: string; group_task_id: string });
+      }
+      pendingAuthStmt.free();
+
+      for (const row of pendingAuthRows) {
+        db.run('UPDATE authorization_requests SET status = ?, resolved_at = ? WHERE id = ?', [
+          'expired',
+          now,
+          row.id,
+        ]);
+        db.run("UPDATE group_tasks SET authorization_status = 'expired' WHERE task_id = ?", [
+          row.group_task_id,
+        ]);
+        db.run("UPDATE tasks SET status = 'pending', assignee_id = NULL WHERE id = ?", [
+          row.group_task_id,
+        ]);
+      }
+
+      // Remove open tasks published by the leaving team from the federation index
+      db.run(
+        `DELETE FROM federation_task_index
+         WHERE group_id = ? AND source_team_id = ? AND status = 'open'`,
+        [id, body.team_id],
+      );
+
+      // Reset tasks claimed by the leaving team back to open in the federation index
+      db.run(
+        `UPDATE federation_task_index
+         SET status = 'open', claimed_by_team_id = NULL, claimed_at = NULL
+         WHERE group_id = ? AND claimed_by_team_id = ? AND status = 'claimed'`,
+        [id, body.team_id],
+      );
+
       // Remove team from group
       db.run('DELETE FROM group_members WHERE group_id = ? AND team_id = ?', [id, body.team_id]);
 
-      // TODO: Reset claimed tasks back to pending pool (requires group_tasks table from STORY-G010)
-
+      db.run('COMMIT');
       db.save();
 
-      // TODO: Send WebSocket notification (group.left)
+      // Disconnect the team's Runner peer if it is connected through federation
+      disconnectPeerByTeamId(body.team_id, 'team_left_group');
+
+      // Keep the in-memory group membership map in sync
+      refreshGroupTeamsMap();
+
+      // Notify remaining group members
+      broadcastToGroup(id, MSG.GROUP_LEFT, {
+        groupId: id,
+        teamId: body.team_id,
+      });
 
       return { success: true };
     } catch (err) {
+      try {
+        db.run('ROLLBACK');
+      } catch {
+        // Ignore rollback errors; the connection may already be closed.
+      }
       const error = err as Error;
       return reply.status(500).send({ error: error.message });
     }

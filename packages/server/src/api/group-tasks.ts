@@ -1,8 +1,10 @@
 import type { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
 import crypto from 'crypto';
 import yaml from 'js-yaml';
+import { MSG } from '@agent-chat-box/shared';
 import { getDatabase } from '../db/index.js';
 import { checkThreshold } from '../modules/reputation.js';
+import { broadcastToTeam } from '../ws/handler.js';
 import { indexGroupTask } from '../federation/hub.js';
 
 /** Register group task API routes */
@@ -307,6 +309,23 @@ export async function registerGroupTaskRoutes(app: FastifyInstance): Promise<voi
           );
           db.save();
 
+          broadcastToTeam(groupTask.source_team_id, MSG.AUTHORIZATION_APPROVED, {
+            authorizationRequestId: authRequestId,
+            taskId: tid,
+            groupId: groupTask.group_id,
+            requestingTeamId: body.team_id,
+            requestingAgentId: body.agent_id,
+            autoApproved: true,
+          });
+          broadcastToTeam(body.team_id, MSG.AUTHORIZATION_APPROVED, {
+            authorizationRequestId: authRequestId,
+            taskId: tid,
+            groupId: groupTask.group_id,
+            requestingTeamId: body.team_id,
+            requestingAgentId: body.agent_id,
+            autoApproved: true,
+          });
+
           return {
             success: true,
             authorization_request_id: authRequestId,
@@ -317,7 +336,14 @@ export async function registerGroupTaskRoutes(app: FastifyInstance): Promise<voi
         // Below threshold: falls through to manual flow
       }
 
-      // TODO: Send WebSocket authorization.requested to task source team owner
+      broadcastToTeam(groupTask.source_team_id, MSG.AUTHORIZATION_REQUESTED, {
+        authorizationRequestId: authRequestId,
+        taskId: tid,
+        groupId: groupTask.group_id,
+        requestingTeamId: body.team_id,
+        requestingAgentId: body.agent_id,
+        expiresAt: now + 300,
+      });
 
       return {
         success: true,

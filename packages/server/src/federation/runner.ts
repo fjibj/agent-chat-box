@@ -7,6 +7,7 @@ import {
   type FederationRegisterPayload,
   type FederationHeartbeatPayload,
   type FederationTaskClaimPayload,
+  type FederationTaskClaimResultPayload,
   type FederationAgentWakePayload,
   buildFedMsg,
   parseFedMsg,
@@ -174,6 +175,22 @@ function handleMessage(raw: string): void {
     case 'federation.agent.wake': {
       const data = msg.data as FederationAgentWakePayload;
       handleWake(data);
+      break;
+    }
+
+    case 'federation.task.claim.result': {
+      const data = msg.data as FederationTaskClaimResultPayload;
+      if (data.success) {
+        console.log(
+          `[federation-runner] Claim accepted: task=${data.taskId}, status=${data.status}`,
+        );
+        if (data.autoApproved && data.taskId) {
+          // The Hub already woke the agent, so just log here to avoid double wake
+          console.log(`[federation-runner] Claim auto-approved, agent will be woken by hub`);
+        }
+      } else {
+        console.warn(`[federation-runner] Claim failed: ${data.error}`);
+      }
       break;
     }
 

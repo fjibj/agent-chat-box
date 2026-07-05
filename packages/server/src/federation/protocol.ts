@@ -10,6 +10,7 @@ export type FederationMessageType =
   | 'federation.member.left'
   | 'federation.task.broadcast'
   | 'federation.task.claim'
+  | 'federation.task.claim.result'
   | 'federation.agent.wake'
   | 'federation.member.leave';
 
@@ -80,6 +81,16 @@ export interface FederationTaskClaimPayload {
   taskId: string;
   agentId: string;
   teamId?: string;
+}
+
+/** Hub → Runner: result of a task claim attempt. */
+export interface FederationTaskClaimResultPayload {
+  success: boolean;
+  error?: string;
+  authorizationRequestId?: string;
+  status?: string;
+  autoApproved?: boolean;
+  taskId?: string;
 }
 
 /** Hub → Runner: wake an agent to execute a federated task. */

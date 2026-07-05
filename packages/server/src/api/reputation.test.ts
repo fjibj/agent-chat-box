@@ -85,3 +85,51 @@ describe('G022: Reputation Threshold', () => {
     expect(body.total_score >= 5).toBe(false);
   });
 });
+
+describe('GAP-06a: Reputation Event History API', () => {
+  it('returns raw reputation events for a team in a group', async () => {
+    const { app, db } = await buildApp();
+    const team = await createTeam(app, 'History', 'user-1');
+    const group = await createGroup(app, 'History Group', team.id);
+
+    // Insert records with explicit timestamps to guarantee ordering
+    db.run(
+      `INSERT INTO reputation_records (id, team_id, group_id, event_type, score_delta, task_id, created_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?)`,
+      ['rep-1', team.id, group.id, 'task_completed', 1, 't1', 1000]
+    );
+    db.run(
+      `INSERT INTO reputation_records (id, team_id, group_id, event_type, score_delta, task_id, created_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?)`,
+      ['rep-2', team.id, group.id, 'review_approved', 1, 't2', 2000]
+    );
+    db.save();
+
+    const res = await app.inject({
+      method: 'GET',
+      url: `/api/groups/${group.id}/reputation/${team.id}/events`,
+    });
+    expect(res.statusCode).toBe(200);
+    const body = JSON.parse(res.payload) as Array<{
+      event_type: string;
+      score_delta: number;
+      task_id: string;
+    }>;
+    expect(body.length).toBe(2);
+    expect(body[0].event_type).toBe('review_approved');
+    expect(body[0].score_delta).toBe(1);
+    expect(body[0].task_id).toBe('t2');
+    expect(body[1].event_type).toBe('task_completed');
+  });
+
+  it('returns 404 for a non-existent group', async () => {
+    const { app } = await buildApp();
+    const team = await createTeam(app, 'NoGroup', 'user-1');
+
+    const res = await app.inject({
+      method: 'GET',
+      url: `/api/groups/nonexistent/reputation/${team.id}/events`,
+    });
+    expect(res.statusCode).toBe(404);
+  });
+});

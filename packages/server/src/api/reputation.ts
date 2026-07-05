@@ -68,4 +68,47 @@ export async function registerReputationRoutes(app: FastifyInstance): Promise<vo
 
     return { team_id: tid, group_id: gid, total_score: 0, event_count: 0, last_event_at: null };
   });
+
+  // GET /api/groups/:gid/reputation/:tid/events — list raw reputation events for a team
+  app.get('/api/groups/:gid/reputation/:tid/events', async (request: FastifyRequest, reply: FastifyReply) => {
+    const { gid, tid } = request.params as { gid: string; tid: string };
+    const db = getDatabase();
+
+    // Verify group exists
+    const groupStmt = db.prepare('SELECT id FROM groups WHERE id = ?');
+    groupStmt.bind([gid]);
+    if (!groupStmt.step()) {
+      groupStmt.free();
+      return reply.status(404).send({ error: 'Group not found' });
+    }
+    groupStmt.free();
+
+    const stmt = db.prepare(`
+      SELECT id, event_type, score_delta, task_id, created_at
+      FROM reputation_records
+      WHERE group_id = ? AND team_id = ?
+      ORDER BY created_at DESC
+    `);
+    stmt.bind([gid, tid]);
+    const results: Array<{
+      id: string;
+      event_type: string;
+      score_delta: number;
+      task_id: string | null;
+      created_at: number;
+    }> = [];
+    while (stmt.step()) {
+      const row = stmt.getAsObject() as {
+        id: string;
+        event_type: string;
+        score_delta: number;
+        task_id: string | null;
+        created_at: number;
+      };
+      results.push(row);
+    }
+    stmt.free();
+
+    return results;
+  });
 }

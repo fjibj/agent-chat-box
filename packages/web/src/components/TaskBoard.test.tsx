@@ -62,6 +62,42 @@ describe('TaskBoard', () => {
     expect(within(authorizationColumn!).getByText('Source: Team One')).toBeDefined();
   });
 
+  it('fetches group tasks when groupId prop is provided', async () => {
+    const fetchedUrls: string[] = [];
+    (global.fetch as ReturnType<typeof vi.fn>).mockImplementation((input: RequestInfo | URL) => {
+      const url = input.toString();
+      fetchedUrls.push(url);
+      if (url.startsWith('/api/groups/group-1/tasks')) {
+        return Promise.resolve({
+          json: () =>
+            Promise.resolve([
+              {
+                id: 'group-task-1',
+                channelId: 'ch-1',
+                title: 'Group Only Task',
+                priority: 'normal',
+                mode: 'compete',
+                status: 'pending',
+                creatorId: 'user-1',
+                isGroupTask: true,
+                groupId: 'group-1',
+                createdAt: 1000,
+              },
+            ]),
+        } as Response);
+      }
+      if (url.startsWith('/api/resolve-names')) {
+        return Promise.resolve({ json: () => Promise.resolve({ names: {} }) } as Response);
+      }
+      return Promise.reject(new Error(`Unexpected fetch: ${url}`));
+    });
+
+    render(<TaskBoard groupId="group-1" />);
+
+    await waitFor(() => expect(screen.getByText('Group Only Task')).toBeDefined());
+    expect(fetchedUrls.some(u => u.startsWith('/api/groups/group-1/tasks'))).toBe(true);
+  });
+
   it('places tasks in correct columns by status (M9-06/07/08/09/11)', async () => {
     const statuses = [
       { status: 'pending', title: 'Pending Task', column: 'Pending' },

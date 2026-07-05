@@ -1,4 +1,5 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
+import type { WSMessage } from '@agent-chat-box/shared';
 import { ReputationBadge } from '../components/ReputationBadge';
 
 interface Group {
@@ -22,7 +23,7 @@ interface Contract {
   visibility?: { task_input?: boolean; task_output?: boolean; internal_log?: boolean };
 }
 
-export function GroupsPage() {
+export function GroupsPage({ wsMessages }: { wsMessages?: WSMessage[] }) {
   const [groups, setGroups] = useState<Group[]>([]);
   const [selectedGroup, setSelectedGroup] = useState<Group | null>(null);
   const [contract, setContract] = useState<Contract | null>(null);
@@ -36,6 +37,7 @@ export function GroupsPage() {
   const [teamIdInput, setTeamIdInput] = useState(teamId);
   const [error, setError] = useState('');
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const debounceRef = useRef<number | null>(null);
 
   const fetchGroups = useCallback(() => {
     fetch(`/api/groups?team_id=${teamId}`)
@@ -55,6 +57,32 @@ export function GroupsPage() {
   useEffect(() => {
     fetchGroups();
   }, [fetchGroups]);
+
+  // Refetch group list/details when group lifecycle events arrive over WebSocket
+  useEffect(() => {
+    if (!wsMessages || wsMessages.length === 0) return;
+    const last = wsMessages[wsMessages.length - 1];
+    const relevantTypes = [
+      'group.created',
+      'group.joined',
+      'group.left',
+      'group.contract.updated',
+    ];
+    if (!relevantTypes.includes(last.type)) return;
+
+    if (debounceRef.current) {
+      window.clearTimeout(debounceRef.current);
+    }
+    debounceRef.current = window.setTimeout(() => {
+      fetchGroups();
+      if (selectedGroup) {
+        fetch(`/api/groups/${selectedGroup.id}`)
+          .then(r => r.json())
+          .then((full: Group) => setSelectedGroup(prev => (prev ? { ...prev, members: full.members } : prev)))
+          .catch(console.error);
+      }
+    }, 300);
+  }, [wsMessages, fetchGroups, selectedGroup?.id]);
 
   useEffect(() => {
     if (!selectedGroup) return;
@@ -305,7 +333,12 @@ export function GroupsPage() {
                   <div key={m.team_id} className="px-4 py-3 border-b border-gray-700 last:border-0 flex items-center justify-between">
                     <span>{m.team_name}</span>
                     <div className="flex items-center gap-2">
-                      <ReputationBadge score={reputation[m.team_id] ?? 0} />
+                      <ReputationBadge
+                        score={reputation[m.team_id] ?? 0}
+                        groupId={selectedGroup.id}
+                        teamId={m.team_id}
+                        teamName={m.team_name}
+                      />
                       <span className="text-xs px-2 py-1 bg-gray-700 rounded">{m.role}</span>
                     </div>
                   </div>

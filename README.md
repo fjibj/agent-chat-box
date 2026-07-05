@@ -16,10 +16,11 @@
 
 - **群系统** — 创建群、邀请码入群、退群、成员管理
 - **群契约** — YAML 格式契约，支持授权模式、信任阈值、共享能力、任务可见性
-- **跨团队任务** — 群内发布任务，支持 required_capabilities 约束
-- **授权闸门** — 跨团队 claim 需审批（手动/自动）
-- **信誉分系统** — 基于任务完成质量的团队信誉评分
+- **跨团队任务** — 群内发布任务，支持 required_capabilities 约束；新增 Group Tasks 专属页面
+- **授权闸门** — 跨团队 claim 需审批（手动/自动）；Authorizations 页面支持团队切换与完整名称显示
+- **信誉分系统** — 基于任务完成质量的团队信誉评分；点击 ReputationBadge 可查看事件明细
 - **Review 工作流** — 任务产出审核、通过/拒绝、回池
+- **实时通知** — WebSocket 推送 authorization/group 生命周期事件，前端自动刷新
 
 ### v0.2.0 联邦网关
 
@@ -34,7 +35,7 @@
 ```
 ┌─────────────────────────────────────────────────────┐
 │                   Web UI (React)                    │
-│   Chat | Tasks | Groups | Authorizations | Agents   │
+│ Chat | Tasks | Group Tasks | Groups | Authorizations | Agents | Settings │
 └────────────────────────┬────────────────────────────┘
                          │ WebSocket + REST API
 ┌────────────────────────┴────────────────────────────┐
@@ -73,7 +74,7 @@
 | 前端 | React 19 + Vite 6 + Tailwind CSS 4 |
 | 类型 | TypeScript strict |
 | 包管理 | npm（monorepo，根目录管理依赖） |
-| 测试 | Vitest（337+ 用例） + Playwright E2E |
+| 测试 | Vitest（362+ 用例） + Playwright E2E |
 
 ## 快速开始
 
@@ -114,8 +115,10 @@ agent-chat-box/
 │   └── web/        # Web UI (React + Vite + Tailwind)
 │       └── src/pages/
 │           ├── GroupsPage.tsx         # 群管理
+│           ├── GroupTasksPage.tsx     # 群任务专属页面
 │           ├── AuthorizationsPage.tsx # 授权审批
-│           └── AgentsPage.tsx         # Agent 管理
+│           ├── AgentsPage.tsx         # Agent 管理
+│           └── SettingsPage.tsx       # 设置与联邦状态
 ├── tests/          # 测试 (API 集成 + 单元测试 + E2E)
 ├── e2e/            # Playwright E2E 测试
 ├── docs/           # 设计文档、用户故事、测试报告
@@ -126,6 +129,7 @@ agent-chat-box/
 
 ## 版本历史
 
+- **[v0.2.0-followup-patch](CHANGELOG.md)** — 关闭人工验证 7 个开放缺口（GAP-14/15/16/06a/08/12a/13），仅余 GAP-19（2026-07-05）
 - **[v0.2.0-followup](CHANGELOG.md)** — UI 补齐 + 联邦完整链路 + 质量门禁（2026-07-03）
 - **[v0.2.0](CHANGELOG.md)** — 群级扩展 + 联邦网关（2026-05-16）
 - **[v0.1.0](CHANGELOG.md)** — 初始版本：跨机调度、实时聊天、任务系统（2026-05-04）
