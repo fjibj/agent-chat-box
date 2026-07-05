@@ -5,6 +5,7 @@ import { MSG } from '@agent-chat-box/shared';
 import { getDatabase } from '../db/index.js';
 import { broadcastToGroup, refreshGroupTeamsMap } from '../ws/handler.js';
 import { disconnectPeerByTeamId } from '../federation/hub.js';
+import { createGroupChannel, getGroupChannelId } from './channels.js';
 
 /** Default group contract template */
 const DEFAULT_CONTRACT_YAML = `# Group Contract
@@ -38,19 +39,22 @@ export async function registerGroupRoutes(app: FastifyInstance): Promise<void> {
 
     const db = getDatabase();
 
-    // Verify owner team exists
-    const teamStmt = db.prepare('SELECT id FROM teams WHERE id = ?');
+    // Verify owner team exists and fetch owner user id
+    const teamStmt = db.prepare('SELECT id, owner_user_id FROM teams WHERE id = ?');
     teamStmt.bind([body.owner_team_id]);
     if (!teamStmt.step()) {
       teamStmt.free();
       return reply.status(404).send({ error: 'Owner team not found' });
     }
+    const teamRow = teamStmt.getAsObject() as { id: string; owner_user_id: string };
     teamStmt.free();
 
     const groupId = `group-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
     const now = Math.floor(Date.now() / 1000);
 
     try {
+      db.run('BEGIN TRANSACTION');
+
       // Create group
       db.run(
         `INSERT INTO groups (id, name, description, contract_yaml, owner_team_id, created_at)
@@ -64,6 +68,15 @@ export async function registerGroupRoutes(app: FastifyInstance): Promise<void> {
         [groupId, body.owner_team_id, 'owner', now]
       );
 
+      // Auto-create a dedicated chat channel for the group
+      const { id: channelId } = createGroupChannel(
+        groupId,
+        body.name.trim(),
+        teamRow.owner_user_id,
+        'human',
+      );
+
+      db.run('COMMIT');
       db.save();
 
       refreshGroupTeamsMap();
@@ -72,15 +85,27 @@ export async function registerGroupRoutes(app: FastifyInstance): Promise<void> {
         name: body.name.trim(),
         ownerTeamId: body.owner_team_id,
       });
+      broadcastToGroup(groupId, MSG.CHANNEL_CREATED, {
+        channelId,
+        name: body.name.trim(),
+        type: 'group',
+        groupId,
+      });
 
       return reply.status(201).send({
         id: groupId,
         name: body.name.trim(),
         description: body.description || '',
         owner_team_id: body.owner_team_id,
+        channel_id: channelId,
         created_at: now,
       });
     } catch (err) {
+      try {
+        db.run('ROLLBACK');
+      } catch {
+        // Ignore rollback errors; the connection may already be closed.
+      }
       const error = err as Error;
       return reply.status(500).send({ error: error.message });
     }
@@ -176,6 +201,11 @@ export async function registerGroupRoutes(app: FastifyInstance): Promise<void> {
     checkStmt.free();
 
     try {
+      // Delete auto-created group channel and its members first
+      const channelId = getGroupChannelId(id);
+      db.run('DELETE FROM channel_members WHERE channel_id = ?', [channelId]);
+      db.run('DELETE FROM channels WHERE id = ?', [channelId]);
+
       // Delete group members first
       db.run('DELETE FROM group_members WHERE group_id = ?', [id]);
       // Delete group

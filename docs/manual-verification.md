@@ -1017,7 +1017,7 @@ sqlite3 data/agent-chat-box.sqlite \
 
 | #      | 步骤                               | 预期结果                                                 | 状态 | 关联代码                                                                 |
 | ------ | ---------------------------------- | -------------------------------------------------------- | ---- | ------------------------------------------------------------------------ |
-| M10-01 | 群成员是否在同一聊天频道           | ⚠️ 当前**没有自动创建群聊频道**的逻辑（设计缺口）        | [❌] | 新增 GAP-19：群创建时应自动创建聊天频道                                  |
+| M10-01 | 群成员是否在同一聊天频道           | 创建群后自动在 Chat 页面出现同名群聊频道，无需刷新       | [x]  | GAP-19 已修复：`groups.ts` 自动创建频道 + `ChannelList` 监听 `channel.created` |
 | M10-02 | 手动把 agent-b1 加入 #general 频道 | 通过 `POST /api/channels/:id/members` 或 daemon 自动加入 | [x]  | `channels.test.ts` POST members 测试覆盖                                 |
 | M10-03 | Team B 用户访问 Chat 页面          | MemberList 显示 agent-b1（机器人图标）                   | [x]  | `MemberList.test.tsx` BOT badge 测试覆盖                                 |
 | M10-04 | @mention agent-b1                  | 触发 daemon 自动回复                                     | [x]  | `MessageInput.test.tsx` @mention 测试覆盖；daemon 回复逻辑 v0.1.0 已验证 |
@@ -1040,8 +1040,8 @@ sqlite3 data/agent-chat-box.sqlite \
 | M7 Review 工作流       | 8       | 8       | 0       | 0       |                            |
 | M8 联邦网关 UI 联动    | 15      | 14      | 1       | 0       | M8-15 WS claim TODO 仍存在 |
 | M9 Tasks 页面交互      | 18      | 18      | 0       | 0       |                            |
-| M10 跨团队聊天         | 5       | 4       | 1       | 0       | M10-01 设计缺口            |
-| **总计**               | **206** | **186** | **2**   | **0**   |                            |
+| M10 跨团队聊天         | 5       | 5       | 0       | 0       | GAP-19 已修复              |
+| **总计**               | **206** | **187** | **1**   | **0**   | GAP-19 修复后失败项降为 1  |
 
 ---
 
@@ -1073,12 +1073,13 @@ sqlite3 data/agent-chat-box.sqlite \
 | GAP-08 | Authorizations 页 team_id 截断显示                                    | 调用 `/api/resolve-names` 显示完整团队名称                                  |
 | GAP-12a | hub.ts `handleClaim` WebSocket 路由仍只 console.log                   | 提取 `processFederationClaim` + 实现 WS claim 路由与 result 响应            |
 | GAP-13 | groups.ts leave 注释 TODO："Reset claimed tasks back to pending pool" | 退群时清理 claimed 任务、过期 auth requests、联邦索引、断开 peer           |
+| GAP-19 | 创建群时未自动创建群聊频道                                            | IDSD 试验修复：`groups.ts` 自动创建频道 + `ChannelList` 监听 `channel.created`；解散群时清理频道 |
 
 ### 仍开放的缺口
 
 | 编号    | 缺口描述                                                              | 严重度 | 影响范围                                  | 建议                      |
 | ------- | --------------------------------------------------------------------- | ------ | ----------------------------------------- | ------------------------- |
-| GAP-19  | 创建群时未自动创建群聊频道                                            | 中     | 群成员无法直接在统一频道聊天              | v0.3.0 群聊天频道自动创建 |
+| （无）  | —                                                                     | —      | —                                         | —                         |
 
 ---
 
@@ -1098,13 +1099,13 @@ sqlite3 data/agent-chat-box.sqlite \
 
 ### 补充说明
 
-- **执行结果**：附录 A~M 共 206 个验证项已全部执行，其中 **186 项通过 ✅、2 项失败 ❌、0 项跳过 ⏭️**。后续补丁关闭 7 个开放缺口（除 GAP-19 外）。
-- **已关闭缺口（7 个）**：GAP-14 / GAP-15 / GAP-16 / GAP-06a / GAP-08 / GAP-12a / GAP-13。
-- **剩余开放缺口（1 个）**：GAP-19 — 创建群时未自动创建群聊频道，属于设计缺口而非功能缺陷。
-- **建议决策**：推荐 **CONDITIONAL GO** — 14 个 v0.2.0 follow-up GAP 与 7 个后续补丁 GAP 已全部关闭，剩余 1 个开放缺口（GAP-19）已记录并给出 v0.3.0 修复建议，当前无阻塞缺陷。
-- **自动化测试**：根 76 + server 242 + web 44 = 362 用例全部通过；typecheck 通过；lint 0 errors（54 warnings，均为既有）。
+- **执行结果**：附录 A~M 共 206 个验证项已全部执行；通过 IDSD 试验修复 GAP-19 后，当前 **187 项通过 ✅、1 项失败 ❌、0 项跳过 ⏭️**。
+- **已关闭缺口（8 个）**：GAP-14 / GAP-15 / GAP-16 / GAP-06a / GAP-08 / GAP-12a / GAP-13 / **GAP-19**。
+- **剩余开放缺口（0 个）**：所有已识别 UI 缺口均已关闭。
+- **建议决策**：推荐 **GO** — 14 个 v0.2.0 follow-up GAP、7 个后续补丁 GAP 与 GAP-19 已全部关闭；仅剩 M8-15 的 WS claim TODO 为已知非阻塞技术债。
+- **自动化测试**：根 76 + server 245 + web 45 = 366 用例全部通过；typecheck 通过；lint 0 errors（54 warnings，均为既有）。
 - **回归测试建议**：
-  - v0.3.0 修复 GAP-19（群聊频道自动创建）后，需回归 Groups 创建流程与 Chat 页面成员列表。
+  - GAP-19 已修复，建议回归 Groups 创建流程与 Chat 页面成员列表。
   - GAP-14 已落地，建议回归 Authorizations 页面实时出现/消失、Groups 页面成员实时更新、TaskBoard 实时状态流转。
 
 ---
@@ -1125,4 +1126,5 @@ sqlite3 data/agent-chat-box.sqlite \
 | 2026-07-04 | M9 Tasks 页面交互               | 18 项全部验证通过；新增 TaskDetailModal/TaskBoard/TaskCard 测试覆盖群任务展示、状态流转、Force Override、子任务树 | ✅    |
 | 2026-07-04 | M10 跨团队聊天                  | 4 项通过（MemberList/@mention/消息发送/名称解析）；1 项失败 M10-01（设计缺口：无自动群聊频道）                    | ✅/❌ |
 | 2026-07-04 | 后续补丁：关闭 7 个开放缺口     | GAP-14/15/16/06a/08/12a/13 已实现并补测试；typecheck/tests/lint/quality:gates 通过；docs 更新                 | ✅    |
+| 2026-07-05 | IDSD 试验：修复 GAP-19          | 使用 IDSD Planned-Build 完成自动群聊频道创建；server 245 / web 45 用例通过；Holdout 8 场景 100% 通过            | ✅    |
 |            | ...                             |                                                                                                                   |       |

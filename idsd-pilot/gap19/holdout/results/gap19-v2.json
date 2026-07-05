@@ -1,0 +1,49 @@
+{
+  "total": 8,
+  "passed": 8,
+  "failed": 0,
+  "skipped": 0,
+  "scenarios": [
+    {
+      "name": "api-create-group-returns-channel-id",
+      "category": "success",
+      "status": "PASS"
+    },
+    {
+      "name": "duplicate-group-names-distinct-channels",
+      "category": "success",
+      "status": "PASS"
+    },
+    {
+      "name": "owner-user-auto-joins-channel",
+      "category": "success",
+      "status": "PASS"
+    },
+    {
+      "name": "ui-create-group-shows-channel",
+      "category": "success",
+      "status": "PASS"
+    },
+    {
+      "name": "group-creation-failure-no-channel-leak",
+      "category": "failure",
+      "status": "PASS"
+    },
+    {
+      "name": "delete-group-cleans-channel",
+      "category": "boundary",
+      "status": "PASS"
+    },
+    {
+      "name": "existing-groups-unchanged",
+      "category": "boundary",
+      "status": "PASS"
+    },
+    {
+      "name": "federation-join-does-not-auto-add",
+      "category": "boundary",
+      "status": "PASS"
+    }
+  ],
+  "timestamp": 1783248912
+}

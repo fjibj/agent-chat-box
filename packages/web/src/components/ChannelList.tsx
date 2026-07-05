@@ -1,4 +1,6 @@
 import { useState, useEffect } from 'react';
+import type { WSMessage } from '@agent-chat-box/shared';
+import { MSG } from '@agent-chat-box/shared';
 
 interface Channel {
   id: string;
@@ -10,17 +12,30 @@ interface Channel {
 interface ChannelListProps {
   selectedChannelId: string | null;
   onSelectChannel: (channelId: string) => void;
+  wsMessages?: WSMessage[];
 }
 
-export function ChannelList({ selectedChannelId, onSelectChannel }: ChannelListProps) {
+function fetchChannels(setChannels: (channels: Channel[]) => void) {
+  fetch('/api/channels')
+    .then(res => res.json())
+    .then(data => setChannels(data.channels || []))
+    .catch(console.error);
+}
+
+export function ChannelList({ selectedChannelId, onSelectChannel, wsMessages }: ChannelListProps) {
   const [channels, setChannels] = useState<Channel[]>([]);
 
   useEffect(() => {
-    fetch('/api/channels')
-      .then(res => res.json())
-      .then(data => setChannels(data.channels || []))
-      .catch(console.error);
+    fetchChannels(setChannels);
   }, []);
+
+  useEffect(() => {
+    if (!wsMessages || wsMessages.length === 0) return;
+    const last = wsMessages[wsMessages.length - 1];
+    if (last.type === MSG.CHANNEL_CREATED) {
+      fetchChannels(setChannels);
+    }
+  }, [wsMessages]);
 
   return (
     <div className="w-64 bg-gray-800 border-r border-gray-700 flex flex-col">

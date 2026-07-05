@@ -14,13 +14,13 @@
 
 ### v0.2.0 群级扩展
 
-- **群系统** — 创建群、邀请码入群、退群、成员管理
+- **群系统** — 创建群、邀请码入群、退群、成员管理；创建群时自动创建群聊频道
 - **群契约** — YAML 格式契约，支持授权模式、信任阈值、共享能力、任务可见性
 - **跨团队任务** — 群内发布任务，支持 required_capabilities 约束；新增 Group Tasks 专属页面
 - **授权闸门** — 跨团队 claim 需审批（手动/自动）；Authorizations 页面支持团队切换与完整名称显示
 - **信誉分系统** — 基于任务完成质量的团队信誉评分；点击 ReputationBadge 可查看事件明细
 - **Review 工作流** — 任务产出审核、通过/拒绝、回池
-- **实时通知** — WebSocket 推送 authorization/group 生命周期事件，前端自动刷新
+- **实时通知** — WebSocket 推送 authorization/group/channel 生命周期事件，前端自动刷新
 
 ### v0.2.0 联邦网关
 
@@ -129,7 +129,8 @@ agent-chat-box/
 
 ## 版本历史
 
-- **[v0.2.0-followup-patch](CHANGELOG.md)** — 关闭人工验证 7 个开放缺口（GAP-14/15/16/06a/08/12a/13），仅余 GAP-19（2026-07-05）
+- **[v0.2.0-idsd-gap19](CHANGELOG.md)** — 使用 IDSD 方法修复 GAP-19：创建群时自动创建群聊频道；Holdout Set 8 场景 100% 通过（2026-07-05）
+- **[v0.2.0-followup-patch](CHANGELOG.md)** — 关闭人工验证 7 个开放缺口（GAP-14/15/16/06a/08/12a/13），后续通过 IDSD 试点修复 GAP-19（2026-07-05）
 - **[v0.2.0-followup](CHANGELOG.md)** — UI 补齐 + 联邦完整链路 + 质量门禁（2026-07-03）
 - **[v0.2.0](CHANGELOG.md)** — 群级扩展 + 联邦网关（2026-05-16）
 - **[v0.1.0](CHANGELOG.md)** — 初始版本：跨机调度、实时聊天、任务系统（2026-05-04）
@@ -150,6 +151,7 @@ agent-chat-box/
 - [TEA 质量门禁](docs/test-artifacts/tea-quality-gate.md)
 - [联邦网络拓扑分析](docs/federation-network-topology-analysis.md)
 - [联邦 E2E 测试指南](docs/federation-e2e-manual-test-guide.md)
+- [IDSD 实践案例：GAP-19](docs/idsd-gap19-case-study.md) — 第一次使用 IDSD Planned-Build 方法修复缺口的完整记录
 
 ## License
 

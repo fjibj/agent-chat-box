@@ -116,7 +116,7 @@ export async function createGroup(
     url: '/api/groups',
     payload: { name, owner_team_id: ownerTeamId, description },
   });
-  return JSON.parse(res.payload) as { id: string; name: string; owner_team_id: string };
+  return JSON.parse(res.payload) as { id: string; name: string; owner_team_id: string; channel_id?: string };
 }
 
 /** Helper to add a team member. */

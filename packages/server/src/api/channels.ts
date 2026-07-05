@@ -61,6 +61,39 @@ export function addChannelMember(
   db.save();
 }
 
+/** Deterministic channel ID for a group */
+export function getGroupChannelId(groupId: string): string {
+  return `group-channel-${groupId}`;
+}
+
+/**
+ * Create a group chat channel and add the owner member.
+ * Does NOT call db.save() so the caller can wrap it in a transaction.
+ */
+export function createGroupChannel(
+  groupId: string,
+  name: string,
+  ownerMemberId: string,
+  ownerMemberKind: 'human' | 'agent' = 'human',
+): { id: string; name: string } {
+  const db = getDatabase();
+  const channelId = getGroupChannelId(groupId);
+
+  db.run('INSERT INTO channels (id, name, description, type) VALUES (?, ?, ?, ?)', [
+    channelId,
+    name,
+    `Auto-created channel for group ${groupId}`,
+    'group',
+  ]);
+  db.run('INSERT INTO channel_members (channel_id, member_id, member_kind) VALUES (?, ?, ?)', [
+    channelId,
+    ownerMemberId,
+    ownerMemberKind,
+  ]);
+
+  return { id: channelId, name };
+}
+
 /** Remove member from channel */
 export function removeChannelMember(channelId: string, memberId: string): void {
   const db = getDatabase();

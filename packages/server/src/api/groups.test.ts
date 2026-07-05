@@ -49,6 +49,75 @@ describe('G006: Group CRUD API', () => {
     const ownerMember = group.members.find((m: { team_id: string; role: string }) => m.team_id === team.id);
     expect(ownerMember.role).toBe('owner');
   });
+
+  it('TC-G006-004 (GAP-19): create group auto-creates chat channel', async () => {
+    const { app, db } = await buildApp();
+    const team = await createTeam(app, 'Alpha', 'user-1');
+
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/groups',
+      payload: { name: 'Engineering Guild', owner_team_id: team.id },
+    });
+    expect(res.statusCode).toBe(201);
+    const body = JSON.parse(res.payload);
+    expect(body.channel_id).toBeDefined();
+
+    // Verify channel row
+    const channelStmt = db.prepare('SELECT id, name, type FROM channels WHERE id = ?');
+    channelStmt.bind([body.channel_id]);
+    expect(channelStmt.step()).toBe(true);
+    const channelRow = channelStmt.getAsObject() as { id: string; name: string; type: string };
+    channelStmt.free();
+    expect(channelRow.name).toBe('Engineering Guild');
+    expect(channelRow.type).toBe('group');
+
+    // Verify owner user is a channel member
+    const memberStmt = db.prepare(
+      'SELECT member_id, member_kind FROM channel_members WHERE channel_id = ?'
+    );
+    memberStmt.bind([body.channel_id]);
+    expect(memberStmt.step()).toBe(true);
+    const memberRow = memberStmt.getAsObject() as { member_id: string; member_kind: string };
+    memberStmt.free();
+    expect(memberRow.member_id).toBe(team.owner_user_id);
+    expect(memberRow.member_kind).toBe('human');
+  });
+
+  it('TC-G006-005 (GAP-19): duplicate group names produce distinct channels', async () => {
+    const { app } = await buildApp();
+    const team = await createTeam(app, 'Alpha', 'user-1');
+
+    const first = await createGroup(app, 'Same Name', team.id);
+    const second = await createGroup(app, 'Same Name', team.id);
+
+    expect(first.channel_id).toBeDefined();
+    expect(second.channel_id).toBeDefined();
+    expect(first.channel_id).not.toBe(second.channel_id);
+  });
+
+  it('TC-G006-006 (GAP-19): deleting group removes auto-created channel', async () => {
+    const { app, db } = await buildApp();
+    const team = await createTeam(app, 'Alpha', 'user-1');
+    const group = await createGroup(app, 'Temporary', team.id);
+
+    const delRes = await app.inject({
+      method: 'DELETE',
+      url: `/api/groups/${group.id}`,
+    });
+    expect(delRes.statusCode).toBe(200);
+
+    // Verify channel and its members are gone
+    const channelStmt = db.prepare('SELECT id FROM channels WHERE id = ?');
+    channelStmt.bind([group.channel_id]);
+    expect(channelStmt.step()).toBe(false);
+    channelStmt.free();
+
+    const memberStmt = db.prepare('SELECT channel_id FROM channel_members WHERE channel_id = ?');
+    memberStmt.bind([group.channel_id]);
+    expect(memberStmt.step()).toBe(false);
+    memberStmt.free();
+  });
 });
 
 describe('G007: Group Contract Config', () => {

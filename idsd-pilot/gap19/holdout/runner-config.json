@@ -1,0 +1,13 @@
+{
+  "project_root": "../../..",
+  "package_manager": "npm",
+  "test_command": "npm test",
+  "typecheck_command": "npm run typecheck",
+  "lint_command": "npm run lint",
+  "evaluate_command": "node evaluate.cjs",
+  "server_dev_command": "npm run dev:server",
+  "api_base_url": "http://localhost:3000",
+  "scenarios_dir": "scenarios",
+  "results_dir": "results",
+  "default_timeout_seconds": 30
+}

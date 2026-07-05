@@ -1,0 +1,47 @@
+project: agent-chat-box
+pilot: gap19
+description: 创建群时自动创建群聊频道。
+started_at: 2026-07-05
+
+phases:
+  - name: harness-setup
+    status: completed
+    started_at: 2026-07-05
+    completed_at: 2026-07-05
+    notes: 已创建 IDSD 目录结构、上下文文档、holdout 框架与 skill 文件。
+
+  - name: intent-expectations
+    status: completed
+    started_at: 2026-07-05
+    completed_at: 2026-07-05
+    notes: 已完成 GAP-19 的 ICE（intent.md + expectations.md）。
+
+  - name: planned-build
+    status: completed
+    started_at: 2026-07-05
+    completed_at: 2026-07-05
+    notes: |
+      已实现：
+      - packages/server/src/api/channels.ts 新增 getGroupChannelId / createGroupChannel
+      - packages/server/src/api/groups.ts 在群创建事务中自动创建频道，解散群时清理频道
+      - packages/web/src/components/ChannelList.tsx 监听 channel.created 并刷新列表
+      - packages/web/src/App.tsx 传递 wsMessages 给 ChannelList
+      - 新增 server/web 测试覆盖 GAP-19
+
+  - name: holdout-evaluation
+    status: completed
+    started_at: 2026-07-05
+    completed_at: 2026-07-05
+    notes: |
+      已运行 evaluate.cjs gap19-v1（场景数 0）和 gap19-v2（8 个场景全部通过，通过率 100%）。
+      已补充 success/failure/boundary 场景文件。
+
+  - name: checkpoint
+    status: completed
+    started_at: 2026-07-05
+    completed_at: 2026-07-05
+    notes: 已更新 checkpoint.md；自动化测试、typecheck 通过，lint 无新增 error。
+
+version_tags:
+  - gap19-v1
+  - gap19-v2

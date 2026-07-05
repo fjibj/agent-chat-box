@@ -57,6 +57,7 @@ function ChatPage({ wsMessages, send, clientId }: { wsMessages: WSMessage[]; sen
       <ChannelList
         selectedChannelId={selectedChannelId}
         onSelectChannel={setSelectedChannelId}
+        wsMessages={wsMessages}
       />
       {selectedChannelId ? (
         <div className="flex-1 flex flex-col min-h-0">
