@@ -59,10 +59,11 @@ export function getDomainReputation(
       FROM reputation_records r
       JOIN group_members gm ON gm.team_id = r.team_id AND gm.group_id = ?
       JOIN domain_members dm ON dm.group_id = r.group_id AND dm.domain_id = ?
+      WHERE r.domain_id IS NULL OR r.domain_id = ?
       GROUP BY r.team_id, r.group_id
     )
   `);
-  stmt.bind([groupId, domainId]);
+  stmt.bind([groupId, domainId, domainId]);
   let reputation = 0;
   if (stmt.step()) {
     const row = stmt.getAsObject() as { reputation: number };
@@ -130,9 +131,10 @@ export function getConsecutiveRejections(
     JOIN group_members gm ON gm.team_id = r.team_id AND gm.group_id = ?
     JOIN domain_members dm ON dm.group_id = r.group_id AND dm.domain_id = ?
     WHERE r.event_type IN ('review_approved', 'review_rejected')
+      AND (r.domain_id IS NULL OR r.domain_id = ?)
     ORDER BY r.created_at DESC, r.rowid DESC
   `);
-  stmt.bind([groupId, domainId]);
+  stmt.bind([groupId, domainId, domainId]);
   let consecutive = 0;
   while (stmt.step()) {
     const row = stmt.getAsObject() as { event_type: string };

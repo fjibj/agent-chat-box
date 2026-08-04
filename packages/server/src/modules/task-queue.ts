@@ -593,8 +593,21 @@ function recordTaskReputation(taskId: string, eventType: 'task_completed' | 'tas
   if (stmt.step()) {
     const row = stmt.getAsObject() as { group_id: string; team_id: string | null };
     stmt.free();
+
+    // Domain collaboration tasks carry their owning domain so completion and
+    // failure events only count in that domain's reputation; plain group tasks
+    // stay domain-less (NULL) and count in every domain.
+    let domainId: string | null = null;
+    const dtStmt = db.prepare('SELECT domain_id FROM domain_tasks WHERE task_id = ?');
+    dtStmt.bind([taskId]);
+    if (dtStmt.step()) {
+      const dt = dtStmt.getAsObject() as { domain_id: string };
+      domainId = dt.domain_id;
+    }
+    dtStmt.free();
+
     if (row.team_id) {
-      recordReputation(row.team_id, row.group_id, eventType, taskId);
+      recordReputation(row.team_id, row.group_id, eventType, taskId, domainId ?? undefined);
     }
   } else {
     stmt.free();

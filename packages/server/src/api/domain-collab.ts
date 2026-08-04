@@ -208,7 +208,7 @@ export async function registerDomainCollabRoutes(app: FastifyInstance): Promise<
 
       // The task must be a collaboration task of this domain
       const dtStmt = db.prepare(
-        'SELECT task_id, requester_group_id, target_group_id FROM domain_tasks WHERE task_id = ? AND domain_id = ?',
+        'SELECT task_id, domain_id, requester_group_id, target_group_id FROM domain_tasks WHERE task_id = ? AND domain_id = ?',
       );
       dtStmt.bind([tid, id]);
       if (!dtStmt.step()) {
@@ -217,6 +217,7 @@ export async function registerDomainCollabRoutes(app: FastifyInstance): Promise<
       }
       const dt = dtStmt.getAsObject() as {
         task_id: string;
+        domain_id: string;
         requester_group_id: string;
         target_group_id: string;
       };
@@ -268,12 +269,15 @@ export async function registerDomainCollabRoutes(app: FastifyInstance): Promise<
         return reply.status(400).send({ error: 'Executing team not found' });
       }
 
-      // Reuse the group-layer review reputation semantics on the target group
+      // Reuse the group-layer review reputation semantics on the target group.
+      // The event is tagged with its owning domain so it only counts in this
+      // domain's reputation aggregation.
       recordReputation(
         agentRow.team_id,
         dt.target_group_id,
         body.decision === 'approved' ? 'review_approved' : 'review_rejected',
         tid,
+        dt.domain_id,
       );
 
       return { success: true, decision: body.decision };

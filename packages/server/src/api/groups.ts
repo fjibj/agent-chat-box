@@ -201,6 +201,31 @@ export async function registerGroupRoutes(app: FastifyInstance): Promise<void> {
     checkStmt.free();
 
     try {
+      // Domains depend on their owner group: deleting the group dissolves
+      // every domain it owns (domain_tasks → domain_members → domains).
+      const ownedStmt = db.prepare('SELECT id FROM domains WHERE owner_group_id = ?');
+      ownedStmt.bind([id]);
+      const ownedDomainIds: string[] = [];
+      while (ownedStmt.step()) {
+        const row = ownedStmt.getAsObject() as { id: string };
+        ownedDomainIds.push(row.id);
+      }
+      ownedStmt.free();
+
+      for (const domainId of ownedDomainIds) {
+        db.run('DELETE FROM domain_tasks WHERE domain_id = ?', [domainId]);
+        db.run('DELETE FROM domain_members WHERE domain_id = ?', [domainId]);
+        db.run('DELETE FROM domains WHERE id = ?', [domainId]);
+      }
+
+      // Clean the group's membership in every remaining domain
+      db.run('DELETE FROM domain_members WHERE group_id = ?', [id]);
+      // Clean the group's collaboration index rows in every domain
+      db.run('DELETE FROM domain_tasks WHERE requester_group_id = ? OR target_group_id = ?', [
+        id,
+        id,
+      ]);
+
       // Delete auto-created group channel and its members first
       const channelId = getGroupChannelId(id);
       db.run('DELETE FROM channel_members WHERE channel_id = ?', [channelId]);

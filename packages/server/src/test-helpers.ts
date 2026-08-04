@@ -44,7 +44,7 @@ export async function createTestDb(): Promise<DatabaseWrapper> {
   const schemaPath = path.join(__dirname, 'db', 'schema.sql');
   const schema = fs.readFileSync(schemaPath, 'utf-8');
   db.exec(schema);
-  db.run('PRAGMA user_version = 11');
+  db.run('PRAGMA user_version = 12');
 
   return db;
 }

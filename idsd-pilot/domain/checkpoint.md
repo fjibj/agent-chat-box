@@ -143,3 +143,30 @@
 ## 遗留事项
 - 无技术遗留。域协作任务默认标题 'Domain collaboration task'。
 - 切片 1-3 代码仍未 git commit（构建代理红线）。
+
+## 切片 4：多域交互的边界处理（2026-08-04）
+
+### 目标
+域解散、群退出、群删除时的数据清理完整性；域级信誉隔离；跨域不可见。纯清理与隔离，不新增机制。
+
+### 评估结果
+- slice4-v1：38/39 —— 唯一失败暴露**真实缺陷**：域级信誉不跨域隔离（B 同属 D1/D2，D1 的评分事件污染 D2 信誉）。考题无误，实现有缺陷。
+- 修复（构建代理第二轮）：schema v11→v12，reputation_records 加可空 domain_id（NULL=群层事件计入所有域；非 NULL=域协作事件只计入该域）；recordReputation 可选 domainId；task-queue 完成/失败事件与 rating 事件按 domain_tasks 打域标记；聚合与连续拒绝计数加 domain_id 过滤。
+- slice4-v2：39/39 100%（34 旧 + 5 新：信誉隔离、跨域不可见、解散/退出/删群清理）。
+
+### 关键设计点
+- 清理完整性：解散域删 domain_tasks（domain_id）；群退出删 requester/target 索引（群任务本体不碰）；删群级联——owner 群被删则其域解散，并清理该群成员关系与协作索引。全程先子表后主表。
+- 评分边界：索引随退出/解散/删群清理 → 评分自然 404（domain-collab 校验链未改动）。
+- 信誉隔离：域协作全生命周期事件（完成/失败/评分）带域标记；群层事件（NULL）计入所有域——群自身表现不受域影响。
+- 本次为 IDSD 流程首次由 holdout 抓出实现缺陷（前三次均为考题问题），验证了考官独立判分的价值。
+
+### 交付物
+- 修改：domains.ts（解散/退出清理）、groups.ts（删群级联）、db/schema.sql + db/index.ts（v12 + 迁移）、modules/reputation.ts（domainId）、modules/task-queue.ts（域标记）、domain-collab.ts（rating 传域）、domain-capabilities.ts（聚合过滤）、test-helpers.ts、domains.test.ts
+- 新增：api/domain-boundaries.test.ts（9+ 用例 TC-S4-001~010）
+
+### 质量门禁
+- server vitest 325/325；根 npm test 76/76；web 45/45；typecheck clean；lint 0 errors（54 存量 warnings）；quality:gates 通过
+- prettier：domains.ts / groups.ts / reputation.ts 为存量偏差（提交基线即存在），未纳入本次改动
+
+### 遗留事项
+- 无技术遗留。切片 1-4 代码待 git commit。

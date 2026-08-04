@@ -1,4 +1,4 @@
-project: agent-chat-box
+﻿project: agent-chat-box
 pilot: domain
 description: 域层（Domain）——声誉驱动的多群联盟层，全部用 IDSD 方法开发。
 started_at: 2026-08-02
@@ -93,6 +93,28 @@ phases:
       34 场景 = 24 旧 + 10 协作/评分/异常检测。
       教训：批量改场景文件时注意行尾与 BOM（CRLF/BOM 会破坏 front-matter 解析）。
 
+
+  - name: slice4-build
+    status: completed
+    started_at: 2026-08-04
+    completed_at: 2026-08-04
+    notes: |
+      构建代理实现：解散域/退出域/删群的清理完整性（domain_tasks 级联），
+      评分边界（索引清理后自然 404）。schema v12：reputation_records 加
+      domain_id（NULL=群层事件计入所有域；非 NULL=域协作事件只计入该域），
+      域协作完成/失败/评分事件打域标记，聚合与连续拒绝计数域过滤。
+      基线门禁全绿（vitest 325/325、npm test 76/76、typecheck、lint、quality:gates）。
+      因轮次上限被终止两次，交卷内容完整。
+
+  - name: slice4-evaluation
+    status: completed
+    started_at: 2026-08-04
+    completed_at: 2026-08-04
+    notes: |
+      holdout 评估：slice4-v1 38/39 —— 唯一失败为真实缺陷（信誉不跨域隔离），
+      非考题问题；修复后 slice4-v2 39/39 100%。
+      39 场景 = 34 旧 + 5 新（信誉隔离、跨域不可见、解散/退出/删群清理）。
+      首次由 holdout 抓出实现缺陷，考官独立判分价值得到验证。
 version_tags:
   - slice1-v1
   - slice1-v2
@@ -102,3 +124,5 @@ version_tags:
   - slice3-v2
   - slice3-v3
   - slice3-v4
+  - slice4-v1
+  - slice4-v2

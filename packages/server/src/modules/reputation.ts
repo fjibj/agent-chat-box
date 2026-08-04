@@ -6,6 +6,7 @@ export function recordReputation(
   groupId: string,
   eventType: 'task_completed' | 'task_failed' | 'review_approved' | 'review_rejected',
   taskId: string,
+  domainId?: string,
 ): void {
   const db = getDatabase();
 
@@ -21,9 +22,9 @@ export function recordReputation(
   const now = Math.floor(Date.now() / 1000);
 
   db.run(
-    `INSERT INTO reputation_records (id, team_id, group_id, event_type, score_delta, task_id, created_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?)`,
-    [id, teamId, groupId, eventType, scoreDelta, taskId, now]
+    `INSERT INTO reputation_records (id, team_id, group_id, event_type, score_delta, task_id, created_at, domain_id)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+    [id, teamId, groupId, eventType, scoreDelta, taskId, now, domainId ?? null]
   );
   db.save();
 }

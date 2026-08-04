@@ -1,5 +1,9 @@
 import { describe, it, expect } from 'vitest';
+import initSqlJs from 'sql.js';
+import path from 'path';
+import { fileURLToPath } from 'url';
 import { buildApp, createTeam, createGroup, createDomain } from '../test-helpers.js';
+import { DatabaseWrapper, migrate, setDatabase } from '../db/index.js';
 
 // IDSD Slice 1: Domain data model & registration API
 // Domain lifecycle is isomorphic to groups (G005-G009), with groups as members.
@@ -29,7 +33,61 @@ describe('IDSD-S1: DB Migration v9→v10', () => {
     expect(memberColumns).toContain('joined_at');
 
     const versionResult = db.exec('PRAGMA user_version');
-    expect(versionResult[0].values[0][0]).toBe(11);
+    expect(versionResult[0].values[0][0]).toBe(12);
+  });
+
+  it('TC-D001-003: v11 → v12 migration adds domain_id to reputation_records', async () => {
+    const __dirname = path.dirname(fileURLToPath(import.meta.url));
+    const wasmPath = path.resolve(
+      __dirname,
+      '..',
+      '..',
+      '..',
+      '..',
+      'node_modules',
+      'sql.js',
+      'dist',
+      'sql-wasm.wasm',
+    );
+    const SQL = await initSqlJs({ locateFile: () => wasmPath });
+    const raw = new SQL.Database();
+
+    // Build a minimal v11 database: reputation_records without domain_id
+    raw.run(`
+      CREATE TABLE reputation_records (
+        id TEXT PRIMARY KEY,
+        team_id TEXT,
+        group_id TEXT,
+        event_type TEXT NOT NULL,
+        score_delta INTEGER NOT NULL,
+        task_id TEXT,
+        created_at INTEGER DEFAULT (unixepoch())
+      );
+    `);
+    raw.run(
+      "INSERT INTO reputation_records (id, team_id, group_id, event_type, score_delta) VALUES ('r1', 'team-1', 'group-1', 'task_completed', 1)",
+    );
+    raw.run('PRAGMA user_version = 11;');
+
+    const db = new DatabaseWrapper(raw);
+    setDatabase(db);
+    migrate(db);
+
+    // Version bumped to 12
+    const versionResult = db.exec('PRAGMA user_version');
+    expect(versionResult[0].values[0][0]).toBe(12);
+
+    // domain_id column added
+    const cols = db.exec('PRAGMA table_info(reputation_records)')[0].values.map((v) => v[1]);
+    expect(cols).toContain('domain_id');
+
+    // Existing rows are backfilled as NULL (group-level events)
+    const rowStmt = db.prepare('SELECT domain_id FROM reputation_records WHERE id = ?');
+    rowStmt.bind(['r1']);
+    expect(rowStmt.step()).toBe(true);
+    const row = rowStmt.getAsObject() as { domain_id: string | null };
+    rowStmt.free();
+    expect(row.domain_id).toBeNull();
   });
 });
 

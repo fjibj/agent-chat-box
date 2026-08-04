@@ -1,5 +1,5 @@
 -- Agent Chat Box Database Schema
--- Version: 11
+-- Version: 12
 
 -- Teams table
 CREATE TABLE IF NOT EXISTS teams (
@@ -154,6 +154,10 @@ CREATE TABLE IF NOT EXISTS reputation_records (
   id TEXT PRIMARY KEY,
   team_id TEXT REFERENCES teams(id),
   group_id TEXT REFERENCES groups(id),
+  -- Domain ownership of the event: NULL = group-level event (counted in every
+  -- domain the group belongs to); non-NULL = domain collaboration event
+  -- (counted only in that domain).
+  domain_id TEXT,
   event_type TEXT NOT NULL CHECK(event_type IN ('task_completed','task_failed','review_approved','review_rejected')),
   score_delta INTEGER NOT NULL,
   task_id TEXT,
@@ -261,7 +265,7 @@ CREATE TABLE IF NOT EXISTS domain_tasks (
 
 CREATE INDEX IF NOT EXISTS idx_domain_tasks_domain ON domain_tasks(domain_id);
 
-PRAGMA user_version = 11;
+PRAGMA user_version = 12;
 
 -- FTS5 not available in sql.js WASM build
 -- Full-text search will use LIKE queries or external search module

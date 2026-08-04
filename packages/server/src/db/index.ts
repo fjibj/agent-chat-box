@@ -107,7 +107,11 @@ export async function createDatabase(): Promise<DatabaseWrapper> {
   return db;
 }
 
-function migrate(db: DatabaseWrapper): void {
+/**
+ * Run schema migrations up to the latest version.
+ * Exported for tests; production code should use createDatabase().
+ */
+export function migrate(db: DatabaseWrapper): void {
   const result = db.exec('PRAGMA user_version');
   let version =
     result.length > 0 && result[0].values.length > 0 ? (result[0].values[0][0] as number) : 0;
@@ -115,11 +119,11 @@ function migrate(db: DatabaseWrapper): void {
   if (version === 0) {
     const schema = fs.readFileSync(SCHEMA_PATH, 'utf-8');
     db.exec(schema);
-    // schema.sql already contains the latest schema (v11) and sets user_version
+    // schema.sql already contains the latest schema (v12) and sets user_version
     // but we explicitly set it here as a safeguard
-    db.run('PRAGMA user_version = 11');
-    version = 11;
-    console.log('[db] Schema v11 created');
+    db.run('PRAGMA user_version = 12');
+    version = 12;
+    console.log('[db] Schema v12 created');
   } else if (version === 1) {
     // v1 → v2: add sender_name column to messages
     db.run('ALTER TABLE messages ADD COLUMN sender_name TEXT');
@@ -464,6 +468,19 @@ function migrate(db: DatabaseWrapper): void {
     db.run('PRAGMA user_version = 11');
     version = 11;
     console.log('[db] Migrated schema to v11 (domain tasks)');
+  }
+
+  if (version <= 11) {
+    // v11 → v12: tag reputation events with their owning domain so domain
+    // collaboration events only count in that domain's reputation aggregation.
+    // Existing rows stay NULL = group-level events (counted in every domain).
+    console.log('[db] Migrating v11 → v12 (reputation domain isolation)...');
+
+    db.exec(`ALTER TABLE reputation_records ADD COLUMN domain_id TEXT;`);
+
+    db.run('PRAGMA user_version = 12');
+    version = 12;
+    console.log('[db] Migrated schema to v12 (reputation domain isolation)');
   }
 }
 

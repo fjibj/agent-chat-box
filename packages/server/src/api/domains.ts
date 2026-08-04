@@ -149,9 +149,11 @@ export async function registerDomainRoutes(app: FastifyInstance): Promise<void> 
     checkStmt.free();
 
     try {
-      // Delete domain members first
+      // Delete collaboration task index first (child of the domain)
+      db.run('DELETE FROM domain_tasks WHERE domain_id = ?', [id]);
+      // Delete domain members next
       db.run('DELETE FROM domain_members WHERE domain_id = ?', [id]);
-      // Delete domain
+      // Delete domain last
       db.run('DELETE FROM domains WHERE id = ?', [id]);
       db.save();
       return { success: true };
@@ -306,7 +308,17 @@ export async function registerDomainRoutes(app: FastifyInstance): Promise<void> 
     }
 
     try {
-      db.run('DELETE FROM domain_members WHERE domain_id = ? AND group_id = ?', [id, body.group_id]);
+      // Collaboration index rows disappear with the membership: drop every
+      // domain_tasks row where the leaving group is requester or target.
+      // The group tasks themselves (tasks / group_tasks) are untouched.
+      db.run(
+        'DELETE FROM domain_tasks WHERE domain_id = ? AND (requester_group_id = ? OR target_group_id = ?)',
+        [id, body.group_id, body.group_id],
+      );
+      db.run('DELETE FROM domain_members WHERE domain_id = ? AND group_id = ?', [
+        id,
+        body.group_id,
+      ]);
       db.save();
       return { success: true };
     } catch (err) {
