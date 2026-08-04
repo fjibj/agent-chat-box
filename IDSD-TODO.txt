@@ -1,0 +1,108 @@
+
+❯ 我们前面用的都是BMAD+TEA的方法，后面我想换一种方法—— IDSD，你先了解一下这种方法，参考《IDSD工具链方案.md》、《用IDSD开发_域_层的实操指南.md》，以及ima数据库【AI coder\IDSD】下的文档，也可以检查一下我做的skill：https://github.com/fjibj/fangjin-skills-factory/tree/main/idsd-harness 是否可用。
+
+已了解 IDSD 方法和你做的 skill。总结如下：
+
+1. 本地文档已读完
+
+《IDSD工具链方案.md》
+- 核心：用 Claude Code + CLAUDE.md/AGENTS.md + Holdout Set 替代 Garura
+- 三层速度管道：/build-feature（Fast）、/start-planned-feature（Planned）、/start-strategic（Strategic）
+- 关键机制：.claudeignore 屏蔽 holdout/scenarios/，构建时 AI 是"考生"看不到场景，评估时换会话 AI 是"考官"
+- 迁移路径：BMAD 的文档 → ARCHITECTURE.md/PROJECT_PROFILE.md，TEA 测试 → Holdout Set
+
+《用IDSD开发"域"层的实操指南.md》
+- 六步法：梳理 Context → 写 Intent（Goal/Constraints/Failure Conditions）→ 写 Expectations（成功/失败/边界场景）→ 选速度管道 → 搭 Harness → 平滑迁移
+- 强调"不让模型猜上下文"，Intent 不写实现细节，Expectations 用用户语言
+
+你的 IDSD harness skill 评估
+
+https://github.com/fjibj/fangjin-skills-factory/tree/main/idsd-harness 结构完整、可直接使用：
+
+- ✅ 4 个 Skill：idsd-fast-build、idsd-planned-build、idsd-strategic-build、idsd-evaluate
+- ✅ 模板：CLAUDE.md、AGENTS.md、PROJECT_PROFILE.md、.claudeignore
+- ✅ Holdout Set：evaluate.py、runner-config.json、scenarios/ 目录
+- ✅ 状态跟踪：idsd/idsd-status.yaml
+- ⚠️ 需要按项目调整：runner-config.json 默认是 Go 命令，Node.js 项目要改 npm test / npm run build
+- ⚠️ evaluate.py 默认人工确认，需逐步接入自动化测试
+
+AI coder\IDSD 知识库内容
+
+找到 IDSD 文件夹，包含以下核心文档：
+
+┌─────────────────────────────────────────────────────────┬───────────┬───────────────────────────────────┐
+│                          标题                           │   类型    │               说明                │
+├─────────────────────────────────────────────────────────┼───────────┼───────────────────────────────────┤
+│ IDSD工具链方案.md                                       │ Markdown  │ 与你本地文件一致，讲 Harness 组装 │
+├─────────────────────────────────────────────────────────┼───────────┼───────────────────────────────────┤
+│ IDSD vs BMAD：一场关于"谁来定义对"的深层分歧            │ 笔记      │ 最完整的中文对比，已读取全文      │
+├─────────────────────────────────────────────────────────┼───────────┼───────────────────────────────────┤
+│ The Anatomy of Intent (ICE in IDSD)                     │ Medium    │ ICE 详细拆解                      │
+├─────────────────────────────────────────────────────────┼───────────┼───────────────────────────────────┤
+│ From Specs to Intents                                   │ Medium    │ 为什么 SDD 会停滞，IDSD 如何解决  │
+├─────────────────────────────────────────────────────────┼───────────┼───────────────────────────────────┤
+│ The Method That Replaces Spec-Driven Development — IDSD │ Medium    │ IDSD 方法论总览                   │
+├─────────────────────────────────────────────────────────┼───────────┼───────────────────────────────────┤
+│ SDD Always Gets Context Wrong. IDSD & ICE Fixes It.     │ Medium    │ Context 问题                      │
+├─────────────────────────────────────────────────────────┼───────────┼───────────────────────────────────┤
+│ 其他 5 篇                                               │ 网页/文章 │ SDD 批判、Loop Engineering 等     │
+└─────────────────────────────────────────────────────────┴───────────┴───────────────────────────────────┘
+
+核心要点（来自 ima 笔记）
+
+IDSD 与 BMAD 的本质区别：不是"有没有设计"，而是"设计的所有权归谁"
+
+┌──────────────┬────────────────────────────┬────────────────────────────────────┐
+│     维度     │         BMAD (SDD)         │                IDSD                │
+├──────────────┼────────────────────────────┼────────────────────────────────────┤
+│ 谁定义"对"   │ 规格文档，人与 AI 共创协商 │ 意图 + 期望，只由想要结果的人写    │
+├──────────────┼────────────────────────────┼────────────────────────────────────┤
+│ 完成由谁判定 │ 规格验收标准 + 人工审查    │ Holdout Set 场景边界（代理看不到） │
+├──────────────┼────────────────────────────┼────────────────────────────────────┤
+│ AI 角色      │ 多智能体模拟敏捷团队       │ 在明确边界内自主构建               │
+├──────────────┼────────────────────────────┼────────────────────────────────────┤
+│ 最大风险     │ 环节间上下文丢失/幻觉      │ 代理在规格留白处自行填补           │
+└──────────────┴────────────────────────────┴────────────────────────────────────┘
+
+关键结论：
+1. IDSD 不是不要设计，而是把设计"内化"到代理构建循环中——人定义"什么是对的"，代理决定"怎么实现"。
+2. Expectations 不追求覆盖所有场景，而是通过 Holdout Set 机制防止代理"应试"。
+3. 适合 IDSD 的前提：产品是你主导、你能用用户语言精确描述边界、信任 harness 管理 Context。
+4. 最务实路径是混合路线：小功能走 IDSD Fast/Planned，战略级架构仍保留 BMAD 人工审查。
+
+
+❯ 是的，我确实想先用GAP-19来试验一下IDSD，但是注意不要影响现有的目录结构，是不是单独建个子文件夹更好？
+
+是的，单独建子文件夹更好，可以保护现有目录不被 IDSD 试验文件污染。
+
+推荐结构：
+
+idsd-pilot/
+└── gap19/
+    ├── CLAUDE.md          # 本次试验补充上下文
+    ├── AGENTS.md          # 试验专用规则
+    ├── PROJECT_PROFILE.md # 项目画像
+    ├── holdout/
+    │   ├── scenarios/
+    │   │   ├── success/
+    │   │   ├── failure/
+    │   │   └── boundary/
+    │   ├── evaluate.py
+    │   └── runner-config.json
+    └── idsd/
+        ├── idsd-status.yaml
+        └── intents/
+            └── gap19-auto-channel/
+                ├── intent.md
+                └── expectations.md
+
+唯一可能需要放在根目录的文件：.claudeignore（一行narios/），否则 Holdout Set的"构建时代理不可见"机制失效。这是一个 dotfile，不影响现有代码结构。
+
+GAP-19 的实际代码改动仍会落在packages/server/src/api/groups.ts、packages/server/src/db/schema.sql、packages/web/src/pages/GroupsPage.tsx 等正常位置，子文件夹只放 IDSD 流程产物。
+
+是否开始？我可以：
+1. 创建 idsd-pilot/gap19/ 目录结构
+2. 根据现有项目信息生成初始 PROJECT_PROFILE.md 和
+3. 用 /start-planned-feature 启动 GAP-19 的 ICE 流程
+
+❯ 很好，那就一步一步开始做吧

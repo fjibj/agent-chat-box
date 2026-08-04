@@ -1,0 +1,12 @@
+{
+  "project_root": "../../..",
+  "package_manager": "npm",
+  "test_command": "npm test",
+  "typecheck_command": "npm run typecheck",
+  "lint_command": "npm run lint",
+  "evaluate_command": "npx tsx evaluate.ts",
+  "scenarios_dir": "scenarios",
+  "results_dir": "results",
+  "default_timeout_seconds": 30,
+  "notes": "v2 evaluator: scenario files carry JSON front-matter with API checks; each scenario runs on a fresh in-process DB via app.inject; baseline gate (npm test + typecheck) runs once per evaluation."
+}

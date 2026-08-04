@@ -1,0 +1,114 @@
+{
+  "version": "slice0-sanity",
+  "total": 5,
+  "passed": 5,
+  "failed": 0,
+  "manual": 0,
+  "baseline": {
+    "test": true,
+    "typecheck": true
+  },
+  "scenarios": [
+    {
+      "name": "api-create-group-returns-channel-id",
+      "category": "success",
+      "status": "PASS",
+      "checks": [
+        {
+          "name": "创建群",
+          "pass": true,
+          "detail": "POST /api/groups → 201"
+        },
+        {
+          "name": "频道出现在频道列表",
+          "pass": true,
+          "detail": "GET /api/channels → 200"
+        },
+        {
+          "name": "频道详情可查且类型为 group",
+          "pass": true,
+          "detail": "GET /api/channels/group-channel-group-1785766064868-2t0hwe → 200"
+        }
+      ]
+    },
+    {
+      "name": "duplicate-group-names-distinct-channels",
+      "category": "success",
+      "status": "PASS",
+      "checks": [
+        {
+          "name": "同名群 A",
+          "pass": true,
+          "detail": "POST /api/groups → 201"
+        },
+        {
+          "name": "同名群 B 产生不同频道",
+          "pass": true,
+          "detail": "POST /api/groups → 201"
+        }
+      ]
+    },
+    {
+      "name": "owner-user-auto-joins-channel",
+      "category": "success",
+      "status": "PASS",
+      "checks": [
+        {
+          "name": "创建群",
+          "pass": true,
+          "detail": "POST /api/groups → 201"
+        },
+        {
+          "name": "群主用户自动成为频道成员",
+          "pass": true,
+          "detail": "GET /api/channels/group-channel-group-1785766064902-bgvox2/members → 200"
+        }
+      ]
+    },
+    {
+      "name": "group-creation-failure-no-channel-leak",
+      "category": "failure",
+      "status": "PASS",
+      "checks": [
+        {
+          "name": "缺 name 创建群被拒",
+          "pass": true,
+          "detail": "POST /api/groups → 400"
+        },
+        {
+          "name": "失败后无频道残留",
+          "pass": true,
+          "detail": "GET /api/channels → 200"
+        }
+      ]
+    },
+    {
+      "name": "delete-group-cleans-channel",
+      "category": "boundary",
+      "status": "PASS",
+      "checks": [
+        {
+          "name": "创建群",
+          "pass": true,
+          "detail": "POST /api/groups → 201"
+        },
+        {
+          "name": "解散群",
+          "pass": true,
+          "detail": "DELETE /api/groups/group-1785766064925-9zjt9f → 200"
+        },
+        {
+          "name": "频道从列表消失",
+          "pass": true,
+          "detail": "GET /api/channels → 200"
+        },
+        {
+          "name": "频道详情 404",
+          "pass": true,
+          "detail": "GET /api/channels/group-channel-group-1785766064925-9zjt9f → 404"
+        }
+      ]
+    }
+  ],
+  "timestamp": 1785766064
+}

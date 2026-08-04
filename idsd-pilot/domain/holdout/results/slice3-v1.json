@@ -1,0 +1,1437 @@
+{
+  "version": "slice3-v1",
+  "total": 34,
+  "passed": 27,
+  "failed": 7,
+  "manual": 0,
+  "baseline": {
+    "test": true,
+    "typecheck": true
+  },
+  "scenarios": [
+    {
+      "name": "api-create-group-returns-channel-id",
+      "category": "success",
+      "status": "PASS",
+      "checks": [
+        {
+          "name": "创建群",
+          "pass": true,
+          "detail": "POST /api/groups → 201"
+        },
+        {
+          "name": "频道出现在频道列表",
+          "pass": true,
+          "detail": "GET /api/channels → 200"
+        },
+        {
+          "name": "频道详情可查且类型为 group",
+          "pass": true,
+          "detail": "GET /api/channels/group-channel-group-1785840410720-kzdy31 → 200"
+        }
+      ]
+    },
+    {
+      "name": "discover-includes-reputation",
+      "category": "success",
+      "status": "PASS",
+      "checks": [
+        {
+          "name": "准备：域 + 群 B",
+          "pass": true,
+          "detail": "POST /api/groups → 201"
+        },
+        {
+          "name": "创建域",
+          "pass": true,
+          "detail": "POST /api/domains → 201"
+        },
+        {
+          "name": "生成邀请码",
+          "pass": true,
+          "detail": "POST /api/domains/domain-1785840410742-9cur37/invite → 200"
+        },
+        {
+          "name": "创建群 B 并加入",
+          "pass": true,
+          "detail": "POST /api/groups → 201"
+        },
+        {
+          "name": "群 B 加入",
+          "pass": true,
+          "detail": "POST /api/domains/join → 200"
+        },
+        {
+          "name": "群 B 声明能力",
+          "pass": true,
+          "detail": "POST /api/domains/domain-1785840410742-9cur37/capabilities → 200"
+        },
+        {
+          "name": "发现结果含信誉数值",
+          "pass": true,
+          "detail": "GET /api/domains/domain-1785840410742-9cur37/discover?capabilities=data-analysis&group_id=group-1785840410739-mt2z9o → 200"
+        }
+      ]
+    },
+    {
+      "name": "discover-matches-by-capability",
+      "category": "success",
+      "status": "PASS",
+      "checks": [
+        {
+          "name": "准备：域 + 群 B、C",
+          "pass": true,
+          "detail": "POST /api/groups → 201"
+        },
+        {
+          "name": "创建域",
+          "pass": true,
+          "detail": "POST /api/domains → 201"
+        },
+        {
+          "name": "生成邀请码",
+          "pass": true,
+          "detail": "POST /api/domains/domain-1785840410772-og4ku6/invite → 200"
+        },
+        {
+          "name": "创建群 B 并加入",
+          "pass": true,
+          "detail": "POST /api/groups → 201"
+        },
+        {
+          "name": "群 B 加入",
+          "pass": true,
+          "detail": "POST /api/domains/join → 200"
+        },
+        {
+          "name": "创建群 C 并加入",
+          "pass": true,
+          "detail": "POST /api/groups → 201"
+        },
+        {
+          "name": "群 C 加入",
+          "pass": true,
+          "detail": "POST /api/domains/join → 200"
+        },
+        {
+          "name": "群 B 声明能力",
+          "pass": true,
+          "detail": "POST /api/domains/domain-1785840410772-og4ku6/capabilities → 200"
+        },
+        {
+          "name": "群 C 声明能力",
+          "pass": true,
+          "detail": "POST /api/domains/domain-1785840410772-og4ku6/capabilities → 200"
+        },
+        {
+          "name": "发现 data-analysis：只命中 B",
+          "pass": true,
+          "detail": "GET /api/domains/domain-1785840410772-og4ku6/discover?capabilities=data-analysis&group_id=group-1785840410770-tonif9 → 200"
+        },
+        {
+          "name": "发现 data-analysis：不含 C",
+          "pass": true,
+          "detail": "GET /api/domains/domain-1785840410772-og4ku6/discover?capabilities=data-analysis&group_id=group-1785840410770-tonif9 → 200"
+        },
+        {
+          "name": "发现 review：命中 C",
+          "pass": true,
+          "detail": "GET /api/domains/domain-1785840410772-og4ku6/discover?capabilities=review&group_id=group-1785840410770-tonif9 → 200"
+        },
+        {
+          "name": "发现 data-analysis+python：命中 B",
+          "pass": true,
+          "detail": "GET /api/domains/domain-1785840410772-og4ku6/discover?capabilities=data-analysis,python&group_id=group-1785840410770-tonif9 → 200"
+        }
+      ]
+    },
+    {
+      "name": "domain-collab-execution-updates-reputation",
+      "category": "success",
+      "status": "FAIL",
+      "checks": [
+        {
+          "name": "创建团队 A",
+          "pass": true,
+          "detail": "POST /api/teams → 201"
+        },
+        {
+          "name": "创建团队 B",
+          "pass": true,
+          "detail": "POST /api/teams → 201"
+        },
+        {
+          "name": "创建群 A",
+          "pass": true,
+          "detail": "POST /api/groups → 201"
+        },
+        {
+          "name": "创建群 B",
+          "pass": true,
+          "detail": "POST /api/groups → 201"
+        },
+        {
+          "name": "群 A 创建域",
+          "pass": true,
+          "detail": "POST /api/domains → 201"
+        },
+        {
+          "name": "生成邀请码",
+          "pass": true,
+          "detail": "POST /api/domains/domain-1785840410810-n2gxf4/invite → 200"
+        },
+        {
+          "name": "群 B 加入域",
+          "pass": true,
+          "detail": "POST /api/domains/join → 200"
+        },
+        {
+          "name": "群 B 声明能力",
+          "pass": true,
+          "detail": "POST /api/domains/domain-1785840410810-n2gxf4/capabilities → 200"
+        },
+        {
+          "name": "创建机器 MB",
+          "pass": true,
+          "detail": "POST /api/machines → 201"
+        },
+        {
+          "name": "创建执行 agent（能力匹配）",
+          "pass": true,
+          "detail": "POST /api/agents → 201"
+        },
+        {
+          "name": "agent 归属团队 B",
+          "pass": true,
+          "detail": "PATCH /api/agents/fb28c1ba-d70f-4298-bf6d-01a9033bd3b3 → 200"
+        },
+        {
+          "name": "发起协作",
+          "pass": false,
+          "detail": "status: expected 200, got 201; body={\"task_id\":\"task-1785840410853-qmi8jh\",\"target_group_id\":\"group-1785840410806-agxhd3\",\"target_group_name\":\"S3E-GB\",\"status\":\"pending\"}"
+        }
+      ]
+    },
+    {
+      "name": "domain-collab-rating-approved",
+      "category": "success",
+      "status": "FAIL",
+      "checks": [
+        {
+          "name": "创建团队 A",
+          "pass": true,
+          "detail": "POST /api/teams → 201"
+        },
+        {
+          "name": "创建团队 B",
+          "pass": true,
+          "detail": "POST /api/teams → 201"
+        },
+        {
+          "name": "创建群 A",
+          "pass": true,
+          "detail": "POST /api/groups → 201"
+        },
+        {
+          "name": "创建群 B",
+          "pass": true,
+          "detail": "POST /api/groups → 201"
+        },
+        {
+          "name": "群 A 创建域",
+          "pass": true,
+          "detail": "POST /api/domains → 201"
+        },
+        {
+          "name": "生成邀请码",
+          "pass": true,
+          "detail": "POST /api/domains/domain-1785840410871-0jxqld/invite → 200"
+        },
+        {
+          "name": "群 B 加入域",
+          "pass": true,
+          "detail": "POST /api/domains/join → 200"
+        },
+        {
+          "name": "群 B 声明能力",
+          "pass": true,
+          "detail": "POST /api/domains/domain-1785840410871-0jxqld/capabilities → 200"
+        },
+        {
+          "name": "创建机器与 agent",
+          "pass": true,
+          "detail": "POST /api/machines → 201"
+        },
+        {
+          "name": "创建执行 agent",
+          "pass": true,
+          "detail": "POST /api/agents → 201"
+        },
+        {
+          "name": "agent 归属团队 B",
+          "pass": true,
+          "detail": "PATCH /api/agents/efaa14d7-bfd2-4fda-a656-7f50fff53a5b → 200"
+        },
+        {
+          "name": "发起协作",
+          "pass": false,
+          "detail": "status: expected 200, got 201; body={\"task_id\":\"task-1785840410917-js8i4l\",\"target_group_id\":\"group-1785840410869-nlfpsx\",\"target_group_name\":\"S3R-GB\",\"status\":\"pending\"}"
+        }
+      ]
+    },
+    {
+      "name": "domain-collab-routes-to-matching-group",
+      "category": "success",
+      "status": "FAIL",
+      "checks": [
+        {
+          "name": "创建团队 A（发起方）",
+          "pass": true,
+          "detail": "POST /api/teams → 201"
+        },
+        {
+          "name": "创建团队 B（执行方）",
+          "pass": true,
+          "detail": "POST /api/teams → 201"
+        },
+        {
+          "name": "创建群 A",
+          "pass": true,
+          "detail": "POST /api/groups → 201"
+        },
+        {
+          "name": "创建群 B（owner=TeamB）",
+          "pass": true,
+          "detail": "POST /api/groups → 201"
+        },
+        {
+          "name": "群 A 创建域",
+          "pass": true,
+          "detail": "POST /api/domains → 201"
+        },
+        {
+          "name": "生成邀请码",
+          "pass": true,
+          "detail": "POST /api/domains/domain-1785840410938-q5twf4/invite → 200"
+        },
+        {
+          "name": "群 B 加入域",
+          "pass": true,
+          "detail": "POST /api/domains/join → 200"
+        },
+        {
+          "name": "群 B 声明 data-analysis 能力",
+          "pass": true,
+          "detail": "POST /api/domains/domain-1785840410938-q5twf4/capabilities → 200"
+        },
+        {
+          "name": "群 A 发起协作",
+          "pass": false,
+          "detail": "status: expected 200, got 201; body={\"task_id\":\"task-1785840410945-sosiwa\",\"target_group_id\":\"group-1785840410936-cswmu7\",\"target_group_name\":\"S3-GB\",\"status\":\"pending\"}"
+        }
+      ]
+    },
+    {
+      "name": "domain-reputation-query",
+      "category": "success",
+      "status": "PASS",
+      "checks": [
+        {
+          "name": "准备：域 + 群 B",
+          "pass": true,
+          "detail": "POST /api/groups → 201"
+        },
+        {
+          "name": "创建域",
+          "pass": true,
+          "detail": "POST /api/domains → 201"
+        },
+        {
+          "name": "生成邀请码",
+          "pass": true,
+          "detail": "POST /api/domains/domain-1785840410958-q0i3us/invite → 200"
+        },
+        {
+          "name": "创建群 B 并加入",
+          "pass": true,
+          "detail": "POST /api/groups → 201"
+        },
+        {
+          "name": "群 B 加入",
+          "pass": true,
+          "detail": "POST /api/domains/join → 200"
+        },
+        {
+          "name": "信誉查询返回两个成员",
+          "pass": true,
+          "detail": "GET /api/domains/domain-1785840410958-q0i3us/reputation?group_id=group-1785840410955-grpf7f → 200"
+        },
+        {
+          "name": "每个成员都带数值信誉",
+          "pass": true,
+          "detail": "GET /api/domains/domain-1785840410958-q0i3us/reputation?group_id=group-1785840410955-grpf7f → 200"
+        }
+      ]
+    },
+    {
+      "name": "duplicate-group-names-distinct-channels",
+      "category": "success",
+      "status": "PASS",
+      "checks": [
+        {
+          "name": "同名群 A",
+          "pass": true,
+          "detail": "POST /api/groups → 201"
+        },
+        {
+          "name": "同名群 B 产生不同频道",
+          "pass": true,
+          "detail": "POST /api/groups → 201"
+        }
+      ]
+    },
+    {
+      "name": "group-creates-domain",
+      "category": "success",
+      "status": "PASS",
+      "checks": [
+        {
+          "name": "准备：创建群 A",
+          "pass": true,
+          "detail": "POST /api/groups → 201"
+        },
+        {
+          "name": "群 A 创建域",
+          "pass": true,
+          "detail": "POST /api/domains → 201"
+        },
+        {
+          "name": "域详情包含 owner 成员",
+          "pass": true,
+          "detail": "GET /api/domains/domain-1785840410999-t9b4o4 → 200"
+        }
+      ]
+    },
+    {
+      "name": "group-declares-capabilities",
+      "category": "success",
+      "status": "PASS",
+      "checks": [
+        {
+          "name": "准备：创建群 A 与域",
+          "pass": true,
+          "detail": "POST /api/groups → 201"
+        },
+        {
+          "name": "创建域",
+          "pass": true,
+          "detail": "POST /api/domains → 201"
+        },
+        {
+          "name": "生成邀请码",
+          "pass": true,
+          "detail": "POST /api/domains/domain-1785840411012-2avae8/invite → 200"
+        },
+        {
+          "name": "准备：创建群 B 并加入",
+          "pass": true,
+          "detail": "POST /api/groups → 201"
+        },
+        {
+          "name": "群 B 加入域",
+          "pass": true,
+          "detail": "POST /api/domains/join → 200"
+        },
+        {
+          "name": "群 B 声明能力",
+          "pass": true,
+          "detail": "POST /api/domains/domain-1785840411012-2avae8/capabilities → 200"
+        },
+        {
+          "name": "能力列表反映更新",
+          "pass": true,
+          "detail": "GET /api/domains/domain-1785840411012-2avae8/capabilities → 200"
+        }
+      ]
+    },
+    {
+      "name": "group-in-multiple-domains",
+      "category": "success",
+      "status": "PASS",
+      "checks": [
+        {
+          "name": "准备：创建群 A",
+          "pass": true,
+          "detail": "POST /api/groups → 201"
+        },
+        {
+          "name": "创建域 D1",
+          "pass": true,
+          "detail": "POST /api/domains → 201"
+        },
+        {
+          "name": "创建域 D2",
+          "pass": true,
+          "detail": "POST /api/domains → 201"
+        },
+        {
+          "name": "D1 生成邀请码",
+          "pass": true,
+          "detail": "POST /api/domains/domain-1785840411035-qwx3i8/invite → 200"
+        },
+        {
+          "name": "D2 生成邀请码",
+          "pass": true,
+          "detail": "POST /api/domains/domain-1785840411036-n3j6u9/invite → 200"
+        },
+        {
+          "name": "准备：创建群 B",
+          "pass": true,
+          "detail": "POST /api/groups → 201"
+        },
+        {
+          "name": "群 B 加入 D1",
+          "pass": true,
+          "detail": "POST /api/domains/join → 200"
+        },
+        {
+          "name": "群 B 加入 D2",
+          "pass": true,
+          "detail": "POST /api/domains/join → 200"
+        },
+        {
+          "name": "D1 成员包含群 B",
+          "pass": true,
+          "detail": "GET /api/domains/domain-1785840411035-qwx3i8 → 200"
+        },
+        {
+          "name": "D2 成员包含群 B",
+          "pass": true,
+          "detail": "GET /api/domains/domain-1785840411036-n3j6u9 → 200"
+        }
+      ]
+    },
+    {
+      "name": "group-joins-via-invite",
+      "category": "success",
+      "status": "PASS",
+      "checks": [
+        {
+          "name": "准备：创建群 A",
+          "pass": true,
+          "detail": "POST /api/groups → 201"
+        },
+        {
+          "name": "群 A 创建域",
+          "pass": true,
+          "detail": "POST /api/domains → 201"
+        },
+        {
+          "name": "生成邀请码",
+          "pass": true,
+          "detail": "POST /api/domains/domain-1785840411060-ofll1i/invite → 200"
+        },
+        {
+          "name": "准备：创建群 B",
+          "pass": true,
+          "detail": "POST /api/groups → 201"
+        },
+        {
+          "name": "群 B 凭邀请码加入域",
+          "pass": true,
+          "detail": "POST /api/domains/join → 200"
+        },
+        {
+          "name": "域成员列表包含群 B（member）",
+          "pass": true,
+          "detail": "GET /api/domains/domain-1785840411060-ofll1i → 200"
+        }
+      ]
+    },
+    {
+      "name": "list-my-domains",
+      "category": "success",
+      "status": "PASS",
+      "checks": [
+        {
+          "name": "准备：创建群 A",
+          "pass": true,
+          "detail": "POST /api/groups → 201"
+        },
+        {
+          "name": "群 A 创建域",
+          "pass": true,
+          "detail": "POST /api/domains → 201"
+        },
+        {
+          "name": "准备：创建群 B（非成员）",
+          "pass": true,
+          "detail": "POST /api/groups → 201"
+        },
+        {
+          "name": "群 A 的域列表包含该域",
+          "pass": true,
+          "detail": "GET /api/domains?group_id=group-1785840411074-q8nky3 → 200"
+        },
+        {
+          "name": "非成员群 B 的域列表不含该域",
+          "pass": true,
+          "detail": "GET /api/domains?group_id=group-1785840411077-jrw9ys → 200"
+        }
+      ]
+    },
+    {
+      "name": "owner-user-auto-joins-channel",
+      "category": "success",
+      "status": "PASS",
+      "checks": [
+        {
+          "name": "创建群",
+          "pass": true,
+          "detail": "POST /api/groups → 201"
+        },
+        {
+          "name": "群主用户自动成为频道成员",
+          "pass": true,
+          "detail": "GET /api/channels/group-channel-group-1785840411087-y6e8xn/members → 200"
+        }
+      ]
+    },
+    {
+      "name": "domain-collab-no-matching-group",
+      "category": "failure",
+      "status": "PASS",
+      "checks": [
+        {
+          "name": "创建团队 A",
+          "pass": true,
+          "detail": "POST /api/teams → 201"
+        },
+        {
+          "name": "创建团队 B",
+          "pass": true,
+          "detail": "POST /api/teams → 201"
+        },
+        {
+          "name": "创建群 A",
+          "pass": true,
+          "detail": "POST /api/groups → 201"
+        },
+        {
+          "name": "创建群 B",
+          "pass": true,
+          "detail": "POST /api/groups → 201"
+        },
+        {
+          "name": "群 A 创建域",
+          "pass": true,
+          "detail": "POST /api/domains → 201"
+        },
+        {
+          "name": "生成邀请码",
+          "pass": true,
+          "detail": "POST /api/domains/domain-1785840411106-pbp5jj/invite → 200"
+        },
+        {
+          "name": "群 B 加入域",
+          "pass": true,
+          "detail": "POST /api/domains/join → 200"
+        },
+        {
+          "name": "群 B 声明能力",
+          "pass": true,
+          "detail": "POST /api/domains/domain-1785840411106-pbp5jj/capabilities → 200"
+        },
+        {
+          "name": "发起无人声明的能力 → 400",
+          "pass": true,
+          "detail": "POST /api/domains/domain-1785840411106-pbp5jj/tasks → 400"
+        }
+      ]
+    },
+    {
+      "name": "duplicate-join",
+      "category": "failure",
+      "status": "PASS",
+      "checks": [
+        {
+          "name": "准备：创建群 A",
+          "pass": true,
+          "detail": "POST /api/groups → 201"
+        },
+        {
+          "name": "群 A 创建域",
+          "pass": true,
+          "detail": "POST /api/domains → 201"
+        },
+        {
+          "name": "生成邀请码 max_uses=5",
+          "pass": true,
+          "detail": "POST /api/domains/domain-1785840411122-3ur70i/invite → 200"
+        },
+        {
+          "name": "准备：创建群 B",
+          "pass": true,
+          "detail": "POST /api/groups → 201"
+        },
+        {
+          "name": "群 B 首次加入成功",
+          "pass": true,
+          "detail": "POST /api/domains/join → 200"
+        },
+        {
+          "name": "群 B 重复加入被拒",
+          "pass": true,
+          "detail": "POST /api/domains/join → 400"
+        }
+      ]
+    },
+    {
+      "name": "group-creation-failure-no-channel-leak",
+      "category": "failure",
+      "status": "PASS",
+      "checks": [
+        {
+          "name": "缺 name 创建群被拒",
+          "pass": true,
+          "detail": "POST /api/groups → 400"
+        },
+        {
+          "name": "失败后无频道残留",
+          "pass": true,
+          "detail": "GET /api/channels → 200"
+        }
+      ]
+    },
+    {
+      "name": "invalid-invite-code",
+      "category": "failure",
+      "status": "PASS",
+      "checks": [
+        {
+          "name": "准备：创建群 A",
+          "pass": true,
+          "detail": "POST /api/groups → 201"
+        },
+        {
+          "name": "群 A 创建域",
+          "pass": true,
+          "detail": "POST /api/domains → 201"
+        },
+        {
+          "name": "准备：创建群 B",
+          "pass": true,
+          "detail": "POST /api/groups → 201"
+        },
+        {
+          "name": "不存在的邀请码加入被拒",
+          "pass": true,
+          "detail": "POST /api/domains/join → 404"
+        },
+        {
+          "name": "域成员列表不含群 B",
+          "pass": true,
+          "detail": "GET /api/domains/domain-1785840411153-49eqop → 200"
+        }
+      ]
+    },
+    {
+      "name": "invite-code-max-uses",
+      "category": "failure",
+      "status": "PASS",
+      "checks": [
+        {
+          "name": "准备：创建群 A",
+          "pass": true,
+          "detail": "POST /api/groups → 201"
+        },
+        {
+          "name": "群 A 创建域",
+          "pass": true,
+          "detail": "POST /api/domains → 201"
+        },
+        {
+          "name": "生成邀请码 max_uses=1",
+          "pass": true,
+          "detail": "POST /api/domains/domain-1785840411165-28h3wm/invite → 200"
+        },
+        {
+          "name": "准备：创建群 B 和 C",
+          "pass": true,
+          "detail": "POST /api/groups → 201"
+        },
+        {
+          "name": "创建群 C",
+          "pass": true,
+          "detail": "POST /api/groups → 201"
+        },
+        {
+          "name": "群 B 首次加入成功",
+          "pass": true,
+          "detail": "POST /api/domains/join → 200"
+        },
+        {
+          "name": "群 C 再使用同一邀请码被拒（达上限）",
+          "pass": true,
+          "detail": "POST /api/domains/join → 400"
+        }
+      ]
+    },
+    {
+      "name": "non-member-cannot-declare",
+      "category": "failure",
+      "status": "PASS",
+      "checks": [
+        {
+          "name": "准备：域 + 非成员群 B",
+          "pass": true,
+          "detail": "POST /api/groups → 201"
+        },
+        {
+          "name": "创建域",
+          "pass": true,
+          "detail": "POST /api/domains → 201"
+        },
+        {
+          "name": "准备：创建群 B（非成员）",
+          "pass": true,
+          "detail": "POST /api/groups → 201"
+        },
+        {
+          "name": "非成员声明能力被拒",
+          "pass": true,
+          "detail": "POST /api/domains/domain-1785840411185-5eunfl/capabilities → 403"
+        }
+      ]
+    },
+    {
+      "name": "non-member-cannot-discover",
+      "category": "failure",
+      "status": "PASS",
+      "checks": [
+        {
+          "name": "准备：域 + 非成员群 B",
+          "pass": true,
+          "detail": "POST /api/groups → 201"
+        },
+        {
+          "name": "创建域",
+          "pass": true,
+          "detail": "POST /api/domains → 201"
+        },
+        {
+          "name": "准备：创建群 B（非成员）",
+          "pass": true,
+          "detail": "POST /api/groups → 201"
+        },
+        {
+          "name": "非成员调用发现被拒",
+          "pass": true,
+          "detail": "GET /api/domains/domain-1785840411199-f1gzeb/discover?capabilities=data-analysis&group_id=group-1785840411201-68n3dn → 403"
+        },
+        {
+          "name": "非成员查信誉被拒",
+          "pass": true,
+          "detail": "GET /api/domains/domain-1785840411199-f1gzeb/reputation?group_id=group-1785840411201-68n3dn → 403"
+        }
+      ]
+    },
+    {
+      "name": "non-member-cannot-initiate-collab",
+      "category": "failure",
+      "status": "PASS",
+      "checks": [
+        {
+          "name": "创建团队 A",
+          "pass": true,
+          "detail": "POST /api/teams → 201"
+        },
+        {
+          "name": "创建团队 B",
+          "pass": true,
+          "detail": "POST /api/teams → 201"
+        },
+        {
+          "name": "创建群 A",
+          "pass": true,
+          "detail": "POST /api/groups → 201"
+        },
+        {
+          "name": "创建群 B（非成员）",
+          "pass": true,
+          "detail": "POST /api/groups → 201"
+        },
+        {
+          "name": "群 A 创建域",
+          "pass": true,
+          "detail": "POST /api/domains → 201"
+        },
+        {
+          "name": "非成员群发起协作 → 403",
+          "pass": true,
+          "detail": "POST /api/domains/domain-1785840411221-vkg1j4/tasks → 403"
+        }
+      ]
+    },
+    {
+      "name": "non-requester-cannot-rate",
+      "category": "failure",
+      "status": "FAIL",
+      "checks": [
+        {
+          "name": "创建团队 A",
+          "pass": true,
+          "detail": "POST /api/teams → 201"
+        },
+        {
+          "name": "创建团队 B",
+          "pass": true,
+          "detail": "POST /api/teams → 201"
+        },
+        {
+          "name": "创建群 A",
+          "pass": true,
+          "detail": "POST /api/groups → 201"
+        },
+        {
+          "name": "创建群 B",
+          "pass": true,
+          "detail": "POST /api/groups → 201"
+        },
+        {
+          "name": "创建群 C（同样属于 TeamA）",
+          "pass": true,
+          "detail": "POST /api/groups → 201"
+        },
+        {
+          "name": "群 A 创建域",
+          "pass": true,
+          "detail": "POST /api/domains → 201"
+        },
+        {
+          "name": "生成邀请码",
+          "pass": true,
+          "detail": "POST /api/domains/domain-1785840411237-lyw1l3/invite → 200"
+        },
+        {
+          "name": "群 B 加入域",
+          "pass": true,
+          "detail": "POST /api/domains/join → 200"
+        },
+        {
+          "name": "群 C 加入域",
+          "pass": true,
+          "detail": "POST /api/domains/join → 200"
+        },
+        {
+          "name": "群 B 声明能力",
+          "pass": true,
+          "detail": "POST /api/domains/domain-1785840411237-lyw1l3/capabilities → 200"
+        },
+        {
+          "name": "创建机器与 agent",
+          "pass": true,
+          "detail": "POST /api/machines → 201"
+        },
+        {
+          "name": "创建执行 agent",
+          "pass": true,
+          "detail": "POST /api/agents → 201"
+        },
+        {
+          "name": "agent 归属团队 B",
+          "pass": true,
+          "detail": "PATCH /api/agents/59fcfadd-d9af-47ad-b8eb-92940a92aa8f → 200"
+        },
+        {
+          "name": "群 A 发起协作",
+          "pass": false,
+          "detail": "status: expected 200, got 201; body={\"task_id\":\"task-1785840411286-wkpgvg\",\"target_group_id\":\"group-1785840411233-10yq42\",\"target_group_name\":\"S3F-GB\",\"status\":\"pending\"}"
+        }
+      ]
+    },
+    {
+      "name": "owner-cannot-leave",
+      "category": "failure",
+      "status": "PASS",
+      "checks": [
+        {
+          "name": "准备：创建群 A",
+          "pass": true,
+          "detail": "POST /api/groups → 201"
+        },
+        {
+          "name": "群 A 创建域",
+          "pass": true,
+          "detail": "POST /api/domains → 201"
+        },
+        {
+          "name": "owner 群退出被拒",
+          "pass": true,
+          "detail": "POST /api/domains/domain-1785840411298-34w8fz/leave → 400"
+        },
+        {
+          "name": "owner 仍在成员列表",
+          "pass": true,
+          "detail": "GET /api/domains/domain-1785840411298-34w8fz → 200"
+        }
+      ]
+    },
+    {
+      "name": "approval-breaks-rejection-streak",
+      "category": "boundary",
+      "status": "FAIL",
+      "checks": [
+        {
+          "name": "创建团队 A",
+          "pass": true,
+          "detail": "POST /api/teams → 201"
+        },
+        {
+          "name": "创建团队 B",
+          "pass": true,
+          "detail": "POST /api/teams → 201"
+        },
+        {
+          "name": "创建群 A",
+          "pass": true,
+          "detail": "POST /api/groups → 201"
+        },
+        {
+          "name": "创建群 B",
+          "pass": true,
+          "detail": "POST /api/groups → 201"
+        },
+        {
+          "name": "群 A 创建域",
+          "pass": true,
+          "detail": "POST /api/domains → 201"
+        },
+        {
+          "name": "生成邀请码",
+          "pass": true,
+          "detail": "POST /api/domains/domain-1785840411314-slvrew/invite → 200"
+        },
+        {
+          "name": "群 B 加入域",
+          "pass": true,
+          "detail": "POST /api/domains/join → 200"
+        },
+        {
+          "name": "群 B 声明能力",
+          "pass": true,
+          "detail": "POST /api/domains/domain-1785840411314-slvrew/capabilities → 200"
+        },
+        {
+          "name": "创建机器与 agent",
+          "pass": true,
+          "detail": "POST /api/machines → 201"
+        },
+        {
+          "name": "创建执行 agent",
+          "pass": true,
+          "detail": "POST /api/agents → 201"
+        },
+        {
+          "name": "agent 归属团队 B",
+          "pass": true,
+          "detail": "PATCH /api/agents/6d8623fa-1b1b-4fe7-a23c-2812fa715819 → 200"
+        },
+        {
+          "name": "协作 1 发起",
+          "pass": false,
+          "detail": "status: expected 200, got 201; body={\"task_id\":\"task-1785840411357-of00hx\",\"target_group_id\":\"group-1785840411312-c4q598\",\"target_group_name\":\"S3BR-GB\",\"status\":\"pending\"}"
+        }
+      ]
+    },
+    {
+      "name": "consecutive-rejections-flag",
+      "category": "boundary",
+      "status": "FAIL",
+      "checks": [
+        {
+          "name": "创建团队 A",
+          "pass": true,
+          "detail": "POST /api/teams → 201"
+        },
+        {
+          "name": "创建团队 B",
+          "pass": true,
+          "detail": "POST /api/teams → 201"
+        },
+        {
+          "name": "创建群 A",
+          "pass": true,
+          "detail": "POST /api/groups → 201"
+        },
+        {
+          "name": "创建群 B",
+          "pass": true,
+          "detail": "POST /api/groups → 201"
+        },
+        {
+          "name": "群 A 创建域",
+          "pass": true,
+          "detail": "POST /api/domains → 201"
+        },
+        {
+          "name": "生成邀请码",
+          "pass": true,
+          "detail": "POST /api/domains/domain-1785840411373-csb69m/invite → 200"
+        },
+        {
+          "name": "群 B 加入域",
+          "pass": true,
+          "detail": "POST /api/domains/join → 200"
+        },
+        {
+          "name": "群 B 声明能力",
+          "pass": true,
+          "detail": "POST /api/domains/domain-1785840411373-csb69m/capabilities → 200"
+        },
+        {
+          "name": "创建机器与 agent",
+          "pass": true,
+          "detail": "POST /api/machines → 201"
+        },
+        {
+          "name": "创建执行 agent",
+          "pass": true,
+          "detail": "POST /api/agents → 201"
+        },
+        {
+          "name": "agent 归属团队 B",
+          "pass": true,
+          "detail": "PATCH /api/agents/8043bea0-36a7-49a8-a82a-c89be59a648e → 200"
+        },
+        {
+          "name": "协作 1 发起",
+          "pass": false,
+          "detail": "status: expected 200, got 201; body={\"task_id\":\"task-1785840411417-i7qbei\",\"target_group_id\":\"group-1785840411371-chzuye\",\"target_group_name\":\"S3F5-GB\",\"status\":\"pending\"}"
+        }
+      ]
+    },
+    {
+      "name": "create-domain-missing-owner",
+      "category": "boundary",
+      "status": "PASS",
+      "checks": [
+        {
+          "name": "缺 owner_group_id 创建域被拒",
+          "pass": true,
+          "detail": "POST /api/domains → 400"
+        },
+        {
+          "name": "缺 name 创建域被拒",
+          "pass": true,
+          "detail": "POST /api/domains → 400"
+        }
+      ]
+    },
+    {
+      "name": "delete-group-cleans-channel",
+      "category": "boundary",
+      "status": "PASS",
+      "checks": [
+        {
+          "name": "创建群",
+          "pass": true,
+          "detail": "POST /api/groups → 201"
+        },
+        {
+          "name": "解散群",
+          "pass": true,
+          "detail": "DELETE /api/groups/group-1785840411432-0d4iip → 200"
+        },
+        {
+          "name": "频道从列表消失",
+          "pass": true,
+          "detail": "GET /api/channels → 200"
+        },
+        {
+          "name": "频道详情 404",
+          "pass": true,
+          "detail": "GET /api/channels/group-channel-group-1785840411432-0d4iip → 404"
+        }
+      ]
+    },
+    {
+      "name": "discover-empty-required",
+      "category": "boundary",
+      "status": "PASS",
+      "checks": [
+        {
+          "name": "准备：域 + 群 B、C",
+          "pass": true,
+          "detail": "POST /api/groups → 201"
+        },
+        {
+          "name": "创建域",
+          "pass": true,
+          "detail": "POST /api/domains → 201"
+        },
+        {
+          "name": "生成邀请码",
+          "pass": true,
+          "detail": "POST /api/domains/domain-1785840411443-s3hvub/invite → 200"
+        },
+        {
+          "name": "创建群 B 并加入",
+          "pass": true,
+          "detail": "POST /api/groups → 201"
+        },
+        {
+          "name": "群 B 加入",
+          "pass": true,
+          "detail": "POST /api/domains/join → 200"
+        },
+        {
+          "name": "创建群 C 并加入",
+          "pass": true,
+          "detail": "POST /api/groups → 201"
+        },
+        {
+          "name": "群 C 加入",
+          "pass": true,
+          "detail": "POST /api/domains/join → 200"
+        },
+        {
+          "name": "空 required 返回全部成员",
+          "pass": true,
+          "detail": "GET /api/domains/domain-1785840411443-s3hvub/discover?capabilities=&group_id=group-1785840411441-emnlos → 200"
+        },
+        {
+          "name": "空 required 包含 B 和 C",
+          "pass": true,
+          "detail": "GET /api/domains/domain-1785840411443-s3hvub/discover?capabilities=&group_id=group-1785840411441-emnlos → 200"
+        }
+      ]
+    },
+    {
+      "name": "dissolve-domain-cleans-members",
+      "category": "boundary",
+      "status": "PASS",
+      "checks": [
+        {
+          "name": "准备：创建群 A",
+          "pass": true,
+          "detail": "POST /api/groups → 201"
+        },
+        {
+          "name": "群 A 创建域",
+          "pass": true,
+          "detail": "POST /api/domains → 201"
+        },
+        {
+          "name": "生成邀请码",
+          "pass": true,
+          "detail": "POST /api/domains/domain-1785840411469-vawqtp/invite → 200"
+        },
+        {
+          "name": "准备：创建群 B",
+          "pass": true,
+          "detail": "POST /api/groups → 201"
+        },
+        {
+          "name": "群 B 加入域",
+          "pass": true,
+          "detail": "POST /api/domains/join → 200"
+        },
+        {
+          "name": "解散域",
+          "pass": true,
+          "detail": "DELETE /api/domains/domain-1785840411469-vawqtp → 200"
+        },
+        {
+          "name": "域详情 404",
+          "pass": true,
+          "detail": "GET /api/domains/domain-1785840411469-vawqtp → 404"
+        },
+        {
+          "name": "群 A 的域列表不再包含该域",
+          "pass": true,
+          "detail": "GET /api/domains?group_id=group-1785840411467-8qrgmw → 200"
+        },
+        {
+          "name": "群 B 的域列表不再包含该域",
+          "pass": true,
+          "detail": "GET /api/domains?group_id=group-1785840411472-3l1v17 → 200"
+        }
+      ]
+    },
+    {
+      "name": "domain-collab-excludes-requester-self",
+      "category": "boundary",
+      "status": "PASS",
+      "checks": [
+        {
+          "name": "创建团队 A",
+          "pass": true,
+          "detail": "POST /api/teams → 201"
+        },
+        {
+          "name": "创建群 A",
+          "pass": true,
+          "detail": "POST /api/groups → 201"
+        },
+        {
+          "name": "群 A 创建域",
+          "pass": true,
+          "detail": "POST /api/domains → 201"
+        },
+        {
+          "name": "群 A 自己声明能力",
+          "pass": true,
+          "detail": "POST /api/domains/domain-1785840411490-9esaod/capabilities → 200"
+        },
+        {
+          "name": "发起协作，唯一匹配者是自己 → 400",
+          "pass": true,
+          "detail": "POST /api/domains/domain-1785840411490-9esaod/tasks → 400"
+        }
+      ]
+    },
+    {
+      "name": "empty-domain-list",
+      "category": "boundary",
+      "status": "PASS",
+      "checks": [
+        {
+          "name": "准备：创建群 C（无任何域）",
+          "pass": true,
+          "detail": "POST /api/groups → 201"
+        },
+        {
+          "name": "域列表返回空数组",
+          "pass": true,
+          "detail": "GET /api/domains?group_id=group-1785840411502-0d5op0 → 200"
+        }
+      ]
+    },
+    {
+      "name": "leave-removes-from-discovery",
+      "category": "boundary",
+      "status": "PASS",
+      "checks": [
+        {
+          "name": "准备：域 + 群 B",
+          "pass": true,
+          "detail": "POST /api/groups → 201"
+        },
+        {
+          "name": "创建域",
+          "pass": true,
+          "detail": "POST /api/domains → 201"
+        },
+        {
+          "name": "生成邀请码",
+          "pass": true,
+          "detail": "POST /api/domains/domain-1785840411511-1bee9z/invite → 200"
+        },
+        {
+          "name": "创建群 B 并加入",
+          "pass": true,
+          "detail": "POST /api/groups → 201"
+        },
+        {
+          "name": "群 B 加入",
+          "pass": true,
+          "detail": "POST /api/domains/join → 200"
+        },
+        {
+          "name": "群 B 声明能力",
+          "pass": true,
+          "detail": "POST /api/domains/domain-1785840411511-1bee9z/capabilities → 200"
+        },
+        {
+          "name": "退出前发现能命中 B",
+          "pass": true,
+          "detail": "GET /api/domains/domain-1785840411511-1bee9z/discover?capabilities=data-analysis&group_id=group-1785840411509-tx0p3w → 200"
+        },
+        {
+          "name": "群 B 退出域",
+          "pass": true,
+          "detail": "POST /api/domains/domain-1785840411511-1bee9z/leave → 200"
+        },
+        {
+          "name": "退出后发现不再命中 B",
+          "pass": true,
+          "detail": "GET /api/domains/domain-1785840411511-1bee9z/discover?capabilities=data-analysis&group_id=group-1785840411509-tx0p3w → 200"
+        },
+        {
+          "name": "能力列表不再含 B",
+          "pass": true,
+          "detail": "GET /api/domains/domain-1785840411511-1bee9z/capabilities → 200"
+        }
+      ]
+    },
+    {
+      "name": "single-rejection-not-flagged",
+      "category": "boundary",
+      "status": "FAIL",
+      "checks": [
+        {
+          "name": "创建团队 A",
+          "pass": true,
+          "detail": "POST /api/teams → 201"
+        },
+        {
+          "name": "创建团队 B",
+          "pass": true,
+          "detail": "POST /api/teams → 201"
+        },
+        {
+          "name": "创建群 A",
+          "pass": true,
+          "detail": "POST /api/groups → 201"
+        },
+        {
+          "name": "创建群 B",
+          "pass": true,
+          "detail": "POST /api/groups → 201"
+        },
+        {
+          "name": "群 A 创建域",
+          "pass": true,
+          "detail": "POST /api/domains → 201"
+        },
+        {
+          "name": "生成邀请码",
+          "pass": true,
+          "detail": "POST /api/domains/domain-1785840411543-yci8qe/invite → 200"
+        },
+        {
+          "name": "群 B 加入域",
+          "pass": true,
+          "detail": "POST /api/domains/join → 200"
+        },
+        {
+          "name": "群 B 声明能力",
+          "pass": true,
+          "detail": "POST /api/domains/domain-1785840411543-yci8qe/capabilities → 200"
+        },
+        {
+          "name": "创建机器与 agent",
+          "pass": true,
+          "detail": "POST /api/machines → 201"
+        },
+        {
+          "name": "创建执行 agent",
+          "pass": true,
+          "detail": "POST /api/agents → 201"
+        },
+        {
+          "name": "agent 归属团队 B",
+          "pass": true,
+          "detail": "PATCH /api/agents/bba049ed-725f-439e-9542-fa83f8ab3886 → 200"
+        },
+        {
+          "name": "发起协作",
+          "pass": false,
+          "detail": "status: expected 200, got 201; body={\"task_id\":\"task-1785840411583-vl5p0h\",\"target_group_id\":\"group-1785840411541-wn7e5v\",\"target_group_name\":\"S3R1-GB\",\"status\":\"pending\"}"
+        }
+      ]
+    }
+  ],
+  "timestamp": 1785840410
+}

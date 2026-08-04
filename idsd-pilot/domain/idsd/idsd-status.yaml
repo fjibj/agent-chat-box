@@ -1,0 +1,104 @@
+project: agent-chat-box
+pilot: domain
+description: 域层（Domain）——声誉驱动的多群联盟层，全部用 IDSD 方法开发。
+started_at: 2026-08-02
+
+phases:
+  - name: harness-setup
+    status: completed
+    started_at: 2026-08-02
+    notes: 创建 idsd-pilot/domain/ 目录结构（沿用 gap19 试点布局）。
+
+  - name: context-profile
+    status: completed
+    started_at: 2026-08-02
+    notes: 完成 PROJECT_PROFILE.md（产品定位、继承架构决策、可复用模块、开放问题）。
+
+  - name: overall-intent
+    status: completed
+    started_at: 2026-08-02
+    completed_at: 2026-08-03
+    notes: |
+      完成域层总体 Intent：目标 + 9 条约束 + 8 条失败条件。
+      核心约束：分形递归（规则预算 ≤ 1）、只处理群级事务、递归复用联邦协议、
+      向后兼容、数据边界、信誉聚合单一可解释、能力语义与群层一致、
+      成员机制同构、不做市场机制。
+
+  - name: eval-automation
+    status: completed
+    started_at: 2026-08-03
+    completed_at: 2026-08-03
+    notes: |
+      切片 0：evaluate.ts v2 —— 场景文件带 JSON front-matter 声明 API 断言，
+      进程内 app.inject 执行、每场景独立全新数据库、基线门禁一次、
+      自动发现 api/ 目录路由模块。自检 5 场景 + 全流程验证通过。
+
+  - name: slice1-build
+    status: completed
+    started_at: 2026-08-03
+    completed_at: 2026-08-03
+    notes: |
+      构建代理（worker 子会话）实现：schema v10（domains/domain_members）、
+      api/domains.ts 7 条路由、shared 类型、23 个测试。
+      基线门禁全绿（npm test 76/76、typecheck、lint 0 errors、server vitest 268/268）。
+      构建代理不可见 holdout/（红线）。
+
+  - name: slice1-evaluation
+    status: completed
+    started_at: 2026-08-03
+    completed_at: 2026-08-03
+    notes: |
+      holdout 评估 slice1-v2：16/16 场景 100% 通过
+      （5 回归 + 11 域场景：创建/邀请/多域/列表/无效码/达上限/owner 禁退/重复加入/解散/空列表/参数校验）。
+      首次出现"代理不可见 holdout 场景时构建、考官独立判分"的完整闭环。
+
+  - name: slice2-build
+    status: completed
+    started_at: 2026-08-03
+    completed_at: 2026-08-03
+    notes: |
+      构建代理（worker 子会话）实现：api/domain-capabilities.ts 4 端点
+      （能力声明/列表、发现、信誉）、23 个测试。信誉聚合=均值单一函数、
+      发现子集匹配、非成员 403、退出即消失。
+      基线门禁全绿（server vitest 291/291、npm test 76/76、typecheck、lint）。
+      构建代理不可见 holdout/（红线）。
+
+  - name: slice2-evaluation
+    status: completed
+    started_at: 2026-08-03
+    completed_at: 2026-08-03
+    notes: |
+      holdout 评估 slice2-v1：23/24（1 个失败为考题自身漏传 group_id，
+      修正后 slice2-v2 24/24 100%）。
+      24 场景 = 5 回归 + 11 域注册 + 8 发现/信誉。
+
+  - name: slice3-build
+    status: completed
+    started_at: 2026-08-04
+    completed_at: 2026-08-04
+    notes: |
+      构建代理实现：schema v11（domain_tasks）、api/domain-collab.ts 3 端点
+      （发起/列表/评分）、discover/reputation 加 flagged、PATCH agents team_id。
+      零新规则：信誉回流复用群层 recordTaskReputation，评分映射 review 事件。
+      基线门禁全绿（vitest 314/314、npm test 76/76、typecheck、lint）。
+      构建代理不可见 holdout/（红线）；因轮次上限被终止，交卷内容完整。
+
+  - name: slice3-evaluation
+    status: completed
+    started_at: 2026-08-04
+    completed_at: 2026-08-04
+    notes: |
+      holdout 评估：slice3-v1 27/34（7 个失败均为考题断言 200 而实现返回 201，
+      非实现缺陷；考题修正后 v4 34/34 100%）。
+      34 场景 = 24 旧 + 10 协作/评分/异常检测。
+      教训：批量改场景文件时注意行尾与 BOM（CRLF/BOM 会破坏 front-matter 解析）。
+
+version_tags:
+  - slice1-v1
+  - slice1-v2
+  - slice2-v1
+  - slice2-v2
+  - slice3-v1
+  - slice3-v2
+  - slice3-v3
+  - slice3-v4
