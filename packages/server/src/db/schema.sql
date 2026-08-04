@@ -1,5 +1,5 @@
 -- Agent Chat Box Database Schema
--- Version: 8
+-- Version: 11
 
 -- Teams table
 CREATE TABLE IF NOT EXISTS teams (
@@ -221,7 +221,47 @@ CREATE INDEX IF NOT EXISTS idx_federation_peers_team ON federation_peers(team_id
 CREATE INDEX IF NOT EXISTS idx_federation_task_index_group ON federation_task_index(group_id, status);
 CREATE INDEX IF NOT EXISTS idx_federation_task_index_labels ON federation_task_index(required_labels);
 
-PRAGMA user_version = 9;
+-- Domains table (multi-group alliance layer)
+CREATE TABLE IF NOT EXISTS domains (
+  id TEXT PRIMARY KEY,
+  name TEXT NOT NULL,
+  description TEXT,
+  contract_yaml TEXT,
+  owner_group_id TEXT REFERENCES groups(id),
+  invite_code TEXT UNIQUE,
+  invite_code_expires_at INTEGER,
+  invite_code_max_uses INTEGER,
+  invite_code_uses INTEGER DEFAULT 0,
+  created_at INTEGER DEFAULT (unixepoch())
+);
+
+-- Domain members table (groups join domains; owner group cannot leave)
+CREATE TABLE IF NOT EXISTS domain_members (
+  domain_id TEXT REFERENCES domains(id) ON DELETE CASCADE,
+  group_id TEXT REFERENCES groups(id) ON DELETE CASCADE,
+  role TEXT DEFAULT 'member' CHECK(role IN ('owner','member')),
+  capabilities TEXT DEFAULT '[]',
+  joined_at INTEGER DEFAULT (unixepoch()),
+  PRIMARY KEY (domain_id, group_id)
+);
+
+-- Domain indexes
+CREATE INDEX IF NOT EXISTS idx_domain_members_domain ON domain_members(domain_id);
+CREATE INDEX IF NOT EXISTS idx_domain_members_group ON domain_members(group_id);
+CREATE INDEX IF NOT EXISTS idx_domains_invite_code ON domains(invite_code);
+
+-- Domain collaboration task index (which domain a cross-group task belongs to)
+CREATE TABLE IF NOT EXISTS domain_tasks (
+  task_id TEXT PRIMARY KEY REFERENCES tasks(id),
+  domain_id TEXT NOT NULL REFERENCES domains(id),
+  requester_group_id TEXT NOT NULL REFERENCES groups(id),
+  target_group_id TEXT NOT NULL REFERENCES groups(id),
+  created_at INTEGER NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_domain_tasks_domain ON domain_tasks(domain_id);
+
+PRAGMA user_version = 11;
 
 -- FTS5 not available in sql.js WASM build
 -- Full-text search will use LIKE queries or external search module

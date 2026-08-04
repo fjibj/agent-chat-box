@@ -12,7 +12,9 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 // Project root: packages/server/src → ../../..
 const PROJECT_ROOT = path.resolve(__dirname, '..', '..', '..');
-const VERSION = JSON.parse(fs.readFileSync(path.join(PROJECT_ROOT, 'package.json'), 'utf-8')).version;
+const VERSION = JSON.parse(
+  fs.readFileSync(path.join(PROJECT_ROOT, 'package.json'), 'utf-8'),
+).version;
 import { handleConnection } from './ws/handler.js';
 import { registerMachineRoutes } from './api/machines.js';
 import { registerChannelRoutes, ensureDefaultChannel } from './api/channels.js';
@@ -22,12 +24,19 @@ import { registerUploadRoutes } from './api/uploads.js';
 import { registerTaskRoutes } from './api/tasks.js';
 import { registerTeamRoutes } from './api/teams.js';
 import { registerGroupRoutes } from './api/groups.js';
+import { registerDomainRoutes } from './api/domains.js';
+import { registerDomainCapabilityRoutes } from './api/domain-capabilities.js';
+import { registerDomainCollabRoutes } from './api/domain-collab.js';
 import { registerGroupTaskRoutes } from './api/group-tasks.js';
 import { registerAuthorizationRoutes, checkExpiredAuthorizations } from './api/authorizations.js';
 import { registerReviewRoutes } from './api/reviews.js';
 import { registerReputationRoutes } from './api/reputation.js';
 import { startTimeoutChecker, stopTimeoutChecker } from './modules/task-queue.js';
-import { handleFederationConnection, registerFederationHubRoutes, startHubHeartbeat } from './federation/hub.js';
+import {
+  handleFederationConnection,
+  registerFederationHubRoutes,
+  startHubHeartbeat,
+} from './federation/hub.js';
 import { initFederationRunner } from './federation/runner.js';
 
 const PORT = parseInt(process.env.PORT || '3000', 10);
@@ -88,7 +97,12 @@ async function main() {
   app.get('/daemon.js', async (_request, reply) => {
     const daemonPath = path.join(PROJECT_ROOT, 'packages', 'daemon', 'dist', 'daemon.cjs');
     if (!fs.existsSync(daemonPath)) {
-      return reply.status(404).send({ error: 'Daemon bundle not built. Run: cd packages/daemon && npx esbuild src/index.ts --bundle --platform=node --format=cjs --outfile=dist/daemon.cjs' });
+      return reply
+        .status(404)
+        .send({
+          error:
+            'Daemon bundle not built. Run: cd packages/daemon && npx esbuild src/index.ts --bundle --platform=node --format=cjs --outfile=dist/daemon.cjs',
+        });
     }
     const content = fs.readFileSync(daemonPath, 'utf-8');
     return reply.header('Content-Type', 'application/javascript').send(content);
@@ -137,6 +151,30 @@ async function main() {
     console.log('[server] Group routes registered');
   } catch (err) {
     console.error('[server] Failed to register group routes:', err);
+  }
+
+  // Domain routes
+  try {
+    await registerDomainRoutes(app);
+    console.log('[server] Domain routes registered');
+  } catch (err) {
+    console.error('[server] Failed to register domain routes:', err);
+  }
+
+  // Domain capability routes
+  try {
+    await registerDomainCapabilityRoutes(app);
+    console.log('[server] Domain capability routes registered');
+  } catch (err) {
+    console.error('[server] Failed to register domain capability routes:', err);
+  }
+
+  // Domain collaboration routes
+  try {
+    await registerDomainCollabRoutes(app);
+    console.log('[server] Domain collaboration routes registered');
+  } catch (err) {
+    console.error('[server] Failed to register domain collaboration routes:', err);
   }
 
   // Group task routes
@@ -188,7 +226,9 @@ async function main() {
     // Remove human members (they rejoin on connect)
     cleanupDb.run('DELETE FROM channel_members WHERE member_kind = ?', ['human']);
     // Remove agent members whose agent no longer exists
-    cleanupDb.run(`DELETE FROM channel_members WHERE member_kind = 'agent' AND member_id NOT IN (SELECT id FROM agents)`);
+    cleanupDb.run(
+      `DELETE FROM channel_members WHERE member_kind = 'agent' AND member_id NOT IN (SELECT id FROM agents)`,
+    );
     cleanupDb.save();
   }
   console.log('[server] Cleaned up stale channel members');
@@ -205,7 +245,12 @@ async function main() {
   // SPA fallback for client-side routing (React Router)
   app.setNotFoundHandler(async (request, reply) => {
     const url = request.url || '/';
-    if (url.startsWith('/api') || url.startsWith('/ws') || url.startsWith('/daemon') || url === '/daemon.js') {
+    if (
+      url.startsWith('/api') ||
+      url.startsWith('/ws') ||
+      url.startsWith('/daemon') ||
+      url === '/daemon.js'
+    ) {
       return reply.status(404).send({ error: 'Not Found' });
     }
     const indexHtml = path.join(webDist, 'index.html');

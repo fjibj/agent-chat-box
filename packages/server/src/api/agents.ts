@@ -156,7 +156,13 @@ export async function registerAgentRoutes(app: FastifyInstance): Promise<void> {
   // PATCH /api/agents/:id — update agent
   app.patch('/api/agents/:id', async (request: FastifyRequest, reply: FastifyReply) => {
     const { id } = request.params as { id: string };
-    const body = request.body as { name?: string; description?: string; capabilities?: string[]; labels?: string[] };
+    const body = request.body as {
+      name?: string;
+      description?: string;
+      capabilities?: string[];
+      labels?: string[];
+      team_id?: string;
+    };
 
     const db = getDatabase();
 
@@ -191,6 +197,18 @@ export async function registerAgentRoutes(app: FastifyInstance): Promise<void> {
     if (body.labels) {
       updates.push('labels = ?');
       params.push(JSON.stringify(body.labels));
+    }
+    if (body.team_id !== undefined) {
+      // Verify the team exists before assigning the agent to it
+      const teamStmt = db.prepare('SELECT id FROM teams WHERE id = ?');
+      teamStmt.bind([body.team_id]);
+      const teamFound = teamStmt.step();
+      teamStmt.free();
+      if (!teamFound) {
+        return reply.status(404).send({ error: 'Team not found' });
+      }
+      updates.push('team_id = ?');
+      params.push(body.team_id);
     }
 
     if (updates.length === 0) {

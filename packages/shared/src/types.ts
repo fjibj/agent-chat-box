@@ -48,6 +48,29 @@ export interface TeamMember {
   joinedAt: number;
 }
 
+// Domain (multi-group alliance layer)
+export interface Domain {
+  id: string;
+  name: string;
+  description?: string;
+  contractYaml?: string;
+  ownerGroupId: string;
+  inviteCode?: string;
+  inviteCodeExpiresAt?: number;
+  inviteCodeMaxUses?: number | null;
+  inviteCodeUses?: number;
+  createdAt: number;
+}
+
+// Domain member (a group inside a domain)
+export interface DomainMember {
+  domainId: string;
+  groupId: string;
+  role: 'owner' | 'member';
+  capabilities?: string[];
+  joinedAt: number;
+}
+
 export interface RoleCard {
   name: string;
   avatar?: string;

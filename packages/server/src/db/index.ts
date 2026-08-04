@@ -115,11 +115,11 @@ function migrate(db: DatabaseWrapper): void {
   if (version === 0) {
     const schema = fs.readFileSync(SCHEMA_PATH, 'utf-8');
     db.exec(schema);
-    // schema.sql already contains the latest schema (v9) and sets user_version
+    // schema.sql already contains the latest schema (v11) and sets user_version
     // but we explicitly set it here as a safeguard
-    db.run('PRAGMA user_version = 9');
-    version = 9;
-    console.log('[db] Schema v9 created');
+    db.run('PRAGMA user_version = 11');
+    version = 11;
+    console.log('[db] Schema v11 created');
   } else if (version === 1) {
     // v1 → v2: add sender_name column to messages
     db.run('ALTER TABLE messages ADD COLUMN sender_name TEXT');
@@ -203,14 +203,14 @@ function migrate(db: DatabaseWrapper): void {
     // Create default team for existing data
     const defaultTeamId = 'team-default';
     const defaultUserId = 'user-default';
-    db.run(
-      `INSERT OR IGNORE INTO teams (id, name, owner_user_id) VALUES (?, 'Default Team', ?)`,
-      [defaultTeamId, defaultUserId]
-    );
-    db.run(
-      `INSERT OR IGNORE INTO team_members (team_id, user_id, role) VALUES (?, ?, 'owner')`,
-      [defaultTeamId, defaultUserId]
-    );
+    db.run(`INSERT OR IGNORE INTO teams (id, name, owner_user_id) VALUES (?, 'Default Team', ?)`, [
+      defaultTeamId,
+      defaultUserId,
+    ]);
+    db.run(`INSERT OR IGNORE INTO team_members (team_id, user_id, role) VALUES (?, ?, 'owner')`, [
+      defaultTeamId,
+      defaultUserId,
+    ]);
 
     // Associate existing machines with default team
     db.run(`UPDATE machines SET team_id = ? WHERE team_id IS NULL`, [defaultTeamId]);
@@ -397,6 +397,73 @@ function migrate(db: DatabaseWrapper): void {
     db.run('PRAGMA user_version = 9');
     version = 9;
     console.log('[db] Migrated schema to v9 (federation gateway)');
+  }
+
+  if (version <= 9) {
+    // v9 → v10: add domains and domain_members tables (multi-group alliance layer)
+    console.log('[db] Migrating v9 → v10 (domains)...');
+
+    // Create domains table
+    db.exec(`
+      CREATE TABLE IF NOT EXISTS domains (
+        id TEXT PRIMARY KEY,
+        name TEXT NOT NULL,
+        description TEXT,
+        contract_yaml TEXT,
+        owner_group_id TEXT REFERENCES groups(id),
+        invite_code TEXT UNIQUE,
+        invite_code_expires_at INTEGER,
+        invite_code_max_uses INTEGER,
+        invite_code_uses INTEGER DEFAULT 0,
+        created_at INTEGER DEFAULT (unixepoch())
+      );
+    `);
+
+    // Create domain_members table
+    db.exec(`
+      CREATE TABLE IF NOT EXISTS domain_members (
+        domain_id TEXT REFERENCES domains(id) ON DELETE CASCADE,
+        group_id TEXT REFERENCES groups(id) ON DELETE CASCADE,
+        role TEXT DEFAULT 'member' CHECK(role IN ('owner','member')),
+        capabilities TEXT DEFAULT '[]',
+        joined_at INTEGER DEFAULT (unixepoch()),
+        PRIMARY KEY (domain_id, group_id)
+      );
+    `);
+
+    // Create indexes
+    db.exec(`
+      CREATE INDEX IF NOT EXISTS idx_domain_members_domain ON domain_members(domain_id);
+      CREATE INDEX IF NOT EXISTS idx_domain_members_group ON domain_members(group_id);
+      CREATE INDEX IF NOT EXISTS idx_domains_invite_code ON domains(invite_code);
+    `);
+
+    db.run('PRAGMA user_version = 10');
+    version = 10;
+    console.log('[db] Migrated schema to v10 (domains)');
+  }
+
+  if (version <= 10) {
+    // v10 → v11: add domain_tasks table (domain collaboration task index)
+    console.log('[db] Migrating v10 → v11 (domain tasks)...');
+
+    db.exec(`
+      CREATE TABLE IF NOT EXISTS domain_tasks (
+        task_id TEXT PRIMARY KEY REFERENCES tasks(id),
+        domain_id TEXT NOT NULL REFERENCES domains(id),
+        requester_group_id TEXT NOT NULL REFERENCES groups(id),
+        target_group_id TEXT NOT NULL REFERENCES groups(id),
+        created_at INTEGER NOT NULL
+      );
+    `);
+
+    db.exec(`
+      CREATE INDEX IF NOT EXISTS idx_domain_tasks_domain ON domain_tasks(domain_id);
+    `);
+
+    db.run('PRAGMA user_version = 11');
+    version = 11;
+    console.log('[db] Migrated schema to v11 (domain tasks)');
   }
 }
 
