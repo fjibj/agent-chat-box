@@ -156,7 +156,7 @@ export function TaskDetailModal({ taskId, onClose, onUpdated, names }: TaskDetai
     try {
       const res = await fetch(url, {
         method,
-        headers: { 'Content-Type': 'application/json' },
+        headers: body ? { 'Content-Type': 'application/json' } : undefined,
         body: body ? JSON.stringify(body) : undefined,
       });
       const data = await res.json();

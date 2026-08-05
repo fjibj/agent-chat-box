@@ -115,6 +115,26 @@ phases:
       非考题问题；修复后 slice4-v2 39/39 100%。
       39 场景 = 34 旧 + 5 新（信誉隔离、跨域不可见、解散/退出/删群清理）。
       首次由 holdout 抓出实现缺陷，考官独立判分价值得到验证。
+
+  - name: slice5-build
+    status: completed
+    started_at: 2026-08-05
+    completed_at: 2026-08-05
+    notes: |
+      构建代理实现：DomainsPage（8 功能块：群选择器、域列表/创建/加入、
+      域详情、能力声明、发现、协作/评分、信誉看板、错误横幅）+ 路由导航
+      + 9 组件测试。纯前端，不改后端/schema/依赖。
+      基线门禁全绿（web vitest 54/54、根 76/76、typecheck、lint、prettier）。
+
+  - name: slice5-evaluation
+    status: completed
+    started_at: 2026-08-05
+    completed_at: 2026-08-05
+    notes: |
+      holdout：slice5-v3 40/40 自动 + 1 MANUAL（v1 两次失败均为考题问题）。
+      MANUAL 人工验收 26 项全绿：完整协作闭环（Approve 信誉 +1）、
+      连续 5 rejected → flagged、非成员 403 隔离、控制台无异常。
+      附带修复：TaskDetailModal 空 body+JSON 头 400；评分报错文案友好化。
 version_tags:
   - slice1-v1
   - slice1-v2
@@ -126,3 +146,6 @@ version_tags:
   - slice3-v4
   - slice4-v1
   - slice4-v2
+  - slice5-v1
+  - slice5-v2
+  - slice5-v3

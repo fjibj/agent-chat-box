@@ -1,4 +1,4 @@
-import type { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
+﻿import type { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
 import { getDatabase } from '../db/index.js';
 import {
   getDomainMembers,
@@ -255,18 +255,18 @@ export async function registerDomainCollabRoutes(app: FastifyInstance): Promise<
 
       // Executing team = the assignee agent's team
       if (!task.assignee_id) {
-        return reply.status(400).send({ error: 'Executing team not found' });
+        return reply.status(400).send({ error: 'Task has no executing team; claim and execute it before rating' });
       }
       const agentStmt = db.prepare('SELECT team_id FROM agents WHERE id = ?');
       agentStmt.bind([task.assignee_id]);
       if (!agentStmt.step()) {
         agentStmt.free();
-        return reply.status(400).send({ error: 'Executing team not found' });
+        return reply.status(400).send({ error: 'Task has no executing team; claim and execute it before rating' });
       }
       const agentRow = agentStmt.getAsObject() as { team_id: string | null };
       agentStmt.free();
       if (!agentRow.team_id) {
-        return reply.status(400).send({ error: 'Executing team not found' });
+        return reply.status(400).send({ error: 'Task has no executing team; claim and execute it before rating' });
       }
 
       // Reuse the group-layer review reputation semantics on the target group.

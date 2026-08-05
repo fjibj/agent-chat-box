@@ -10,6 +10,7 @@ import { TaskBoard } from './components/TaskBoard';
 import { AgentsPage } from './pages/AgentsPage';
 import { SettingsPage } from './pages/SettingsPage';
 import { GroupsPage } from './pages/GroupsPage';
+import { DomainsPage } from './pages/DomainsPage';
 import { GroupTasksPage } from './pages/GroupTasksPage';
 import { AuthorizationsPage } from './pages/AuthorizationsPage';
 import { requestNotificationPermission, setNavigationCallback, notifyTaskComplete, notifyMention } from './utils/notifications';
@@ -189,6 +190,7 @@ export default function App() {
               <NavLink to="/tasks">Tasks</NavLink>
               <NavLink to="/group-tasks">Group Tasks</NavLink>
               <NavLink to="/groups">Groups</NavLink>
+              <NavLink to="/domains">Domains</NavLink>
               <NavLink to="/authorizations">Authorizations</NavLink>
               <NavLink to="/agents">Agents</NavLink>
               <NavLink to="/settings">Settings</NavLink>
@@ -203,6 +205,7 @@ export default function App() {
             <Route path="/tasks" element={<TasksPage wsMessages={messages} />} />
             <Route path="/group-tasks" element={<GroupTasksPage wsMessages={messages} />} />
             <Route path="/groups" element={<GroupsPage wsMessages={messages} />} />
+            <Route path="/domains" element={<DomainsPage />} />
             <Route path="/authorizations" element={<AuthorizationsPage wsMessages={messages} />} />
             <Route path="/agents" element={<AgentsPage />} />
             <Route path="/settings" element={<SettingsPage />} />

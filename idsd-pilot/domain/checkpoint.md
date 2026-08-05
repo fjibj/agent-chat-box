@@ -170,3 +170,27 @@
 
 ### 遗留事项
 - 无技术遗留。切片 1-4 代码待 git commit。
+
+## 切片 5：域层 UI（DomainsPage）（2026-08-05）
+
+### 目标
+为域层提供完整用户界面：/domains 页面，以某个群身份完成域管理全部操作（创建/加入/解散域、成员与邀请、能力声明、发现、协作与评分、信誉看板）。UI 只消费切片 1-4 API，不改后端。
+
+### 评估结果
+- holdout：slice5-v1 39/40 + 1 MANUAL（2 处失败均为考题自身问题：\ 不支持数组改用 \；多余的认领 check 不属于 UI 数据面已删）；slice5-v3 **40/40 自动 + 1 MANUAL**。
+- MANUAL 人工验收（2026-08-05 用户逐项验证）：26 项全绿——含完整闭环"发起→认领→授权→完成→评分"（Approve 后信誉 +1）、连续 5 次 rejected → flagged 标记（GroupB 信誉 -3 flagged true）、非成员群 403 隔离（UI 隐藏非成员域 + 后端 403）、控制台无异常。
+
+### 关键设计点
+- 单页面 8 功能块：群选择器（acb-teamId + 群下拉）、域列表/创建/加入、域详情（成员/邀请码/退出/解散）、能力声明、发现（信誉+flagged）、协作任务（发起/评分，仅 requester 可见评分按钮）、信誉看板、错误横幅。
+- apiFetch 统一封装：非 2xx 提取 {error} 显示横幅不崩溃。
+- 附带修复（非切片范围）：TaskDetailModal 空 body + JSON 头导致 force-complete 400（Fastify 拒绝）；domain-collab 评分报错文案友好化（"Task has no executing team; claim and execute it before rating"）。
+
+### 交付物
+- 新增：packages/web/src/pages/DomainsPage.tsx（~600 行）、DomainsPage.test.tsx（9 用例）、holdout 场景 2 个（数据面回归 + MANUAL 清单）
+- 修改：App.tsx（路由 /domains + 导航）、TaskDetailModal.tsx（apiCall 修复）、domain-collab.ts（错误文案）
+
+### 质量门禁
+- web vitest 54/54（45 旧 + 9 新）；根 npm test 76/76；typecheck clean；lint 0 errors；新文件 prettier clean
+
+### 遗留事项
+- 域层机制切片 1-4 + UI 切片 5 全部完成。切片 5 代码 + 两个附带修复待 git commit。
