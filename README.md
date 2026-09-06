@@ -187,10 +187,10 @@ agent-chat-box/
 
 ## 版本历史
 
-- **[v0.3.0](CHANGELOG.md)** — 域层（Domain）+ 工程链路修复：域注册 / 能力发现 / 域级信誉隔离 / 域协作与评分 / `DomainsPage`；IDSD 5 切片，holdout 40/40 自动 + 26 项人工验收；schema v10→v12；修 `packages/web` 构建与 CI E2E harness（2026-09-06）
-- **[v0.2.0-idsd-gap19](CHANGELOG.md)** — 使用 IDSD 方法修复 GAP-19：创建群时自动创建群聊频道；Holdout Set 8 场景 100% 通过（2026-07-05）
-- **[v0.2.0-followup-patch](CHANGELOG.md)** — 关闭人工验证 7 个开放缺口（GAP-14/15/16/06a/08/12a/13），后续通过 IDSD 试点修复 GAP-19（2026-07-05）
-- **[v0.2.0-followup](CHANGELOG.md)** — UI 补齐 + 联邦完整链路 + 质量门禁（2026-07-03）
+- **[v0.3.0](docs/release-notes/v0.3.0.md)** — 域层（Domain）+ 工程链路收口：域注册 / 能力发现 / 域级信誉隔离 / 域协作与评分 / `DomainsPage`；IDSD 5 切片，holdout 41 场景（40 自动通过 + 1 转人工）+ 26 项人工验收；schema v9→v12；修 `packages/web` 构建、Tailwind 路径与 CI E2E harness，**CI 首次两个 job 全绿**（2026-09-06）· [发布说明](docs/release-notes/v0.3.0.md) · [CHANGELOG](CHANGELOG.md)
+- **[v0.2.0-idsd-gap19](CHANGELOG.md)** — 使用 IDSD 方法修复 GAP-19：创建群时自动创建群聊频道；Holdout Set 8 场景 100% 通过（2026-07-05，未打标签，随 v0.3.0 发布）
+- **[v0.2.0-followup-patch](CHANGELOG.md)** — 关闭人工验证 7 个开放缺口（GAP-14/15/16/06a/08/12a/13），后续通过 IDSD 试点修复 GAP-19（2026-07-05，未打标签，随 v0.3.0 发布）
+- **[v0.2.0-followup](CHANGELOG.md)** — UI 补齐 + 联邦完整链路 + 质量门禁（2026-07-03，未打标签，随 v0.3.0 发布）
 - **[v0.2.0](CHANGELOG.md)** — 群级扩展 + 联邦网关（2026-05-16）
 - **[v0.1.0](CHANGELOG.md)** — 初始版本：跨机调度、实时聊天、任务系统（2026-05-04）
 
@@ -203,6 +203,7 @@ agent-chat-box/
 - [群扩展 PRD](docs/prd-agent-chat-box-group-expansion-2026-05-11.md)
 - [联邦网关 PRD](docs/prd-federation-gateway-2026-05-16.md)
 - [Sprint 计划](docs/sprint-plan-agent-chat-box-2026-05-01.md)
+- [v0.3.0 发布说明](docs/release-notes/v0.3.0.md) — 这一版做了什么、怎么上手、验证结论与已知遗留（可直接用作 Release 正文）
 - [验证记录](docs/manual-verification.md)
 - [用户故事](docs/stories/) — 71 个故事 (STORY-001~035, STORY-G001~G031, STORY-F001~F012, STORY-Q001)
 - [测试报告](docs/test-artifacts/)

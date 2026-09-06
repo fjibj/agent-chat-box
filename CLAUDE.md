@@ -16,6 +16,7 @@
 - v0.2.0 follow-up stories（G027~G031、F011~F012、Q001）已完成开发与测试，用于关闭人工验证发现的 14 个 GAP；
 - `docs/manual-verification.md` 人工验证已执行完毕：206 项，188 通过 / 0 失败，决策 GO；
 - v0.3.0 域层（Domain）用 IDSD 方法交付（过程产物在 `idsd-pilot/domain/`），并修复了 web 生产构建、Tailwind 路径与 CI E2E harness。
+- GAP-19（建群自动建群聊频道）于 2026-07-05 由 IDSD Planned-Build 修复；它与两个 `0.2.0-followup*` 段从未单独打标签，随 v0.3.0 首次发版。发布说明：`docs/release-notes/v0.3.0.md`。
 
 ## 核心架构
 
@@ -269,7 +270,7 @@ Agent 状态：`sleeping` → `awake` → `running` → `sleeping`（或 `offlin
 ✅ 信誉分系统：基于任务完成质量累计
 ✅ Review 工作流：审核任务产出、通过/拒绝、回池
 ✅ 联邦网关：Hub/Runner 星型拓扑、标签匹配路由、跨团队 Agent 唤醒
-✅ Web UI：7 个主页面（Chat / Tasks / Groups / Domains / Authorizations / Agents / Settings）
+✅ Web UI：8 个路由页面（Chat / Tasks / Group Tasks / Groups / Domains / Authorizations / Agents / Settings）
 ✅ 域层（Domain，IDSD 交付）：域注册与邀请码、能力声明与子集匹配发现、域级信誉隔离、域协作任务与评分、连续拒绝异常检测、schema v10→v12
 ✅ 455 个自动化测试（根 76 + server 325 + web 54）+ Playwright E2E（8 通过 / 5 需手动 Hub•Runner），TEA 决策 GO
 ✅ v0.2.0 follow-up stories 完成：Groups 生命周期 UI、Agent labels、TaskBoard 群任务区分、ReputationBadge 接入、Review UI、Federation Peers 面板、质量门禁与 CI

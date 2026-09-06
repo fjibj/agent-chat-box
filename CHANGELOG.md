@@ -2,32 +2,74 @@
 
 ## [0.3.0] - 2026-09-06
 
-> **v0.3.0 = 域层（Domain）落地 + 工程链路修复。** 分层进度：Team ✅ / Group ✅ / Domain ✅ / World ⬜ 未开始。
-> 域层整层由 IDSD 方法交付（构建代理看不到 holdout 场景，考官独立判分）；同时修复了长期并存在但被遮蔽的 web 构建、Tailwind 路径与 CI E2E 配置问题。
+> **v0.3.0 = 域层（Domain）落地 + 工程链路收口。** 分层进度：Team ✅ v0.1.0 / Group ✅ v0.2.0 / Domain ✅ v0.3.0 / World ⬜ 未开始。
+>
+> 域层整层由 IDSD 方法交付（构建代理看不到 holdout 场景，考官独立判分）；同时修掉一批长期存在、但被本地旧缓存与错误 CI 配置遮蔽的 web 构建 / Tailwind / E2E 问题。
+>
+> **本版同时是 v0.2.0 之后全部未发布工作的首次发版**：`[0.2.0-followup]`（2026-07-03）与 `[0.2.0-followup-patch]`（2026-07-05）两段从未打标签，GAP-19 在 2026-07-05 落地后也一直悬空——它们现在随 v0.3.0 一起进入发布产物。
+>
+> **范围**：`v0.2.0` → `v0.3.0`，15 个提交 / 208 个文件变更 / +45 863 −931。面向使用者的发布说明见 `docs/release-notes/v0.3.0.md`。
 
 ### 新增：域层（Domain）— 用 IDSD 方法于 2026-08-02 ~ 08-05 交付
 
-- **域注册** — `POST/GET/DELETE /api/domains`、`/invite`、`/join`、`/:id/leave`；owner 群禁止退出、邀请码上限与失效校验
+- **域注册与成员生命周期** — `domains.ts` 7 个端点：`POST/GET /api/domains`、`GET/DELETE /api/domains/:id`、`POST /:id/invite`、`POST /join`、`POST /:id/leave`；owner 群禁止退出、邀请码次数上限与过期校验、重复入群拒绝
 - **能力声明与发现** — `domain-capabilities.ts` 4 端点：声明 / 列表 / `discover`（`required ⊆ declared` 子集匹配，按信誉排序）/ 信誉查询
 - **域协作** — `domain-collab.ts` 3 端点：发起协作任务自动路由到能力匹配的群、列表、请求方评分（复用群层 review 事件语义，零新规则）
 - **域级信誉隔离** — `reputation_records.domain_id`（NULL = 群层事件计入所有域；非 NULL = 域协作事件只计入该域）；连续 5 次 rejected 触发 flagged，approve 打断连击
 - **边界清理** — 解散域 / 退出域 / 删群级联清理 `domain_tasks` 与 `domain_members`
-- **数据层** — schema v10（domains / domain_members）→ v11（domain_tasks）→ v12（信誉域标记）
+- **数据层** — 新增 `domains` / `domain_members` / `domain_tasks` 三表与 `reputation_records.domain_id`（schema v10 → v12）
 - **Web UI** — 新增 `DomainsPage`（群选择器、域列表/创建/加入、域详情、能力声明、发现、协作与评分、信誉看板、错误横幅）+ 导航与路由
-- **方法论** — 5 个切片均为“构建代理看不到 holdout 场景 + 考官独立判分”；holdout 40/40 自动 + 26 项人工验收；过程中由 holdout 拓出一处真实缺陷（信誉不跨域隔离）。详见 `idsd-pilot/domain/IDSD域层实战总结.md`
+- **方法论与判分** — slice 0（评估自动化）+ 5 个功能切片，全部“构建代理不可见 holdout + 考官独立判分”；holdout 场景共 41 个（success 18 / failure 10 / boundary 13），最终切片 40 项自动通过 + 1 项转人工，配套 26 项人工验收清单；逐切片判分演进 16/16 → 24/24 → 34/34 → 39/39 → 40/40。过程中由 holdout 揪出一处真实缺陷（信誉未按域隔离）。详见 `idsd-pilot/domain/IDSD域层实战总结.md`
 
-### 修复：工程链路与质量门禁（2026-09-06）
+### 新增：群层收尾 — GAP-19 建群自动建群聊频道（2026-07-05，IDSD 首次实战）
 
-- **fix(web)** — 补 `packages/web/src/vite-env.d.ts`（`vite/client` 类型，修 `import.meta.env` 报错）；`TaskCardProps` 导出供测试引用；`TaskDetailModal.test.tsx` 夹具补 `parentTaskId` 类型。之因长期未发现：根 `tsconfig.json` 排除了 `packages/web/src`
+- **建群即建频道** — `POST /api/groups` 创建群时自动创建同名聊天频道并将 owner 自动加入，联邦 `join` 不自动加频道（与既定预期一致）
+- **边界与失败不泄漏** — 频道创建失败不残留半态群；删群级联清理频道；已有群行为不变
+- **holdout** — 8 个场景（success 4 / failure 1 / boundary 3）：首轮评估因场景装载为空而 0/0，修正评估器后 v2 8/8 全过
+- **存档** — `docs/idsd-gap19-case-study.md`、`idsd-pilot/gap19/`（项目首次采用 IDSD 的试点）
+
+### 变更
+
+- **分层与流程文档化** — README 新增“分层与研发流程”：Team/Group 用 BMAD+TEA、Domain 用 IDSD、World 待定（两种流程并列而非统一）
+- **数据层** — schema v9 → v12（v10 domains/domain_members、v11 domain_tasks、v12 reputation_records.domain_id）；旧库启动时自动逐段迁移
+- **工具链布局** — `packages/web` 与 `packages/server` 各自持有完整测试/构建工具链与 lockfile（尚未切 npm workspaces）
+- **发布口径** — `/api/version` 与 `/api/server-info` 继续从 `package.json` 动态读取，无硬编码版本号（门禁校验）
+
+### 修复：web 构建 / Tailwind / E2E / CI（2026-09-06）
+
+- **fix(web)** — 补 `packages/web/src/vite-env.d.ts`（`vite/client` 类型，修 `import.meta.env` 报错）；`TaskCardProps` 导出供测试引用；`TaskDetailModal.test.tsx` 夹具补 `parentTaskId` 类型。。之所以长期未被发现：根 `tsconfig.json` 排除了 `packages/web/src`
 - **fix(web)** — `tailwind.config.cjs` 的 `content` 改用 `path.resolve(__dirname, ...)`，任意目录构建产物一致（此前从 `packages/web` 构建会丢失全部工具类）
 - **fix(web)** — 消除双份 React：`packages/web` 现在自带完整前端工具链（react / react-router-dom / vitest / testing-library / jsdom / typescript），`vitest.config.ts` 的 `react` 别名改指本包 `node_modules`。此前别名指向仓库根，一旦从干净依赖树跑测试就会 `Invalid hook call`（本地因旧缓存侥幸通过，CI 必挂）
 - **fix(ci)** — `npm run build:server` 需要 `@types/js-yaml`，`e2e-test` job 补上 `npm ci --prefix packages/server`
 - **build** — 根 `npm run build` 新增 `build:web`；`npm run typecheck` 同时检查 `packages/web`
 - **test** — 根 `npm test` / `test:coverage` 串联三套套件（根 76 + server 325 + web 54 = 455）
-- **ci** — `e2e-test` job 自 2026-05-17 起 12/12 失败（`baseURL :3000` 配 `webServer` 跑 vite `:5173`）：现统一为根目录单一 Playwright harness（拉起 server 并服务已构建 UI），`packages/web` 脚本转发到同一配置；`unit-test` job 补上 typecheck（含 web）、lint、全量测试与质量门禁
+- **ci** — `e2e-test` job 自 2026-05-17 起连续 13 次失败（根因：`baseURL :3000` 配 `webServer` 跑 vite `:5173`，永远等不到服务）：现统一为根目录单一 Playwright harness（拉起 server 并服务已构建 UI），`packages/web` 脚本转发到同一配置；`unit-test` job 补上 typecheck（含 web）、lint、全量测试与质量门禁；run #14 首次两个 job 全绿
 - **test(e2e)** — `e2e/groups.spec.ts` 修正严格定位冲突（此前三重定义失效导致该 spec 从未真正跑过）；联邦用例改为 `FEDERATION_E2E=1` 显式开启（需手动 Hub:3001 / Runner:3002）
 - **chore** — `e2e/.auth/`（登录态）与 `packages/web/.env.development` 移出跟踪，新增 `packages/web/.env.example`
-- **docs** — README 补全分层（Team/Group/Domain/World）与 BMAD+TEA vs IDSD 研发流程说明；`manual-verification.md` 将 M8-15 标记为已关闭（GAP-12a 已落地）、测试计数归正 455
+- **docs** — README 补全分层（Team/Group/Domain/World）与 BMAD+TEA vs IDSD 研发流程说明；`manual-verification.md` 将 M8-15 标记为已关闭（GAP-12a 已落地）、测试计数归正 455；新增 `docs/release-notes/v0.3.0.md`（可直接用作 Release 正文）
+
+### 测试与质量
+
+- **455 个自动化测试**（根 76 + server 325 + web 54）——一次 `npm test` 跑完，三套均绿
+- **Playwright E2E** — 本地 8 通过 / 5 跳过（联邦用例需 `FEDERATION_E2E=1` 与手动 Hub:3001 / Runner:3002）
+- **人工验证** — `docs/manual-verification.md` 附录 A~M 共 206 项已执行完毕：188 通过 / 0 失败 / 0 跳过，决策 **GO**
+- **门禁** — `npm run quality:gates` 3/3（TODO 基线 10 条、孤儿组件基线 1 条、硬编码版本校验）；lint 0 errors / 54 warnings（存量）
+- **CI** — GitHub Actions run #14：`unit-test` 122s / `e2e-test` 64s，均 success
+
+### 已知遗留（本版不修）
+
+- 54 条 lint warning（`any` / 未用变量）属存量，仅告警不阻塞
+- `packages/server/src/api/reviews.ts:56,71` 两处 `review.completed` 的 WS 广播仍为 TODO（已在基线内）
+- 仓库仍留着 `pnpm-lock.yaml`（155.9 kB）与空的 `pnpm-workspace.yaml`，实际用 npm —— 待清理或直接转 npm workspaces
+- `e2e/.auth/state.json`（登录态）历史上被 git 跟踪过；已加 `.gitignore` 并停止跟踪，但旧内容仍在提交历史中，如介意可重写历史
+- World（跨域联邦）层尚未开工
+
+### 升级指引
+
+- **数据库** — 无需手动迁移：启动时按 `PRAGMA user_version` 逐段升到 v12，已有数据保留
+- **全新克隆** — 需三处安装：`npm ci && npm ci --prefix packages/web && npm ci --prefix packages/server`（CI 已同步为这个口径）
+- **前端构建** — 现在可从任意目录执行 `npm run build`（Tailwind `content` 已改绝对路径）；根构建新增 `build:web`
+- **测试入口** — 统一用根 `npm test` / `npm run test:e2e`；`packages/web` 不再自带 playwright 配置
 
 ## [0.2.0] - 2026-05-16
 
@@ -72,7 +114,7 @@
 - 分层组织架构：Team → Group → Domain → World（当前实现 Group 层）
 - 协议设计预留递归性，支持未来 Domain/World 层扩展
 
-## [0.2.0-followup-patch] - 2026-07-05
+## [0.2.0-followup-patch] - 2026-07-05（未单独打标签，随 v0.3.0 发布）
 
 ### 关闭人工验证剩余 7 个开放缺口（除 GAP-19 外）
 
@@ -89,7 +131,7 @@
 - 根 76 + server 242 + web 44 = **362 个自动化测试**全部通过
 - typecheck / lint / quality:gates 通过
 
-## [0.2.0-followup] - 2026-07-03
+## [0.2.0-followup] - 2026-07-03（未单独打标签，随 v0.3.0 发布）
 
 ### UI 补齐（关闭人工验证发现的 14 个 GAP）
 
