@@ -15,8 +15,9 @@ jobs:
         with:
           node-version: 22
       - run: npm ci
-      # packages/web and packages/server keep their own lockfiles (no npm workspaces yet),
-      # so their deps (tailwind, react-router-dom, js-yaml, ...) must be installed too.
+      # packages/web and packages/server ship their own toolchains (react + vitest + testing-library,
+      # fastify types + vitest), so their deps (tailwind, react-router-dom, js-yaml, ...) must be
+      # installed too — the root install deliberately does not own them.
       - run: npm ci
         working-directory: packages/web
       - run: npm ci
@@ -51,6 +52,8 @@ jobs:
       - run: npm ci
       - run: npm ci
         working-directory: packages/web
+      - run: npm ci
+        working-directory: packages/server
       - run: npx playwright install --with-deps chromium
       # The E2E harness boots the central server, which serves packages/web/dist —
       # so the Web UI has to be built (this also gates `tsc` on the web package).

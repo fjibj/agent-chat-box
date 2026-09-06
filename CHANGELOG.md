@@ -20,6 +20,8 @@
 
 - **fix(web)** — 补 `packages/web/src/vite-env.d.ts`（`vite/client` 类型，修 `import.meta.env` 报错）；`TaskCardProps` 导出供测试引用；`TaskDetailModal.test.tsx` 夹具补 `parentTaskId` 类型。之因长期未发现：根 `tsconfig.json` 排除了 `packages/web/src`
 - **fix(web)** — `tailwind.config.cjs` 的 `content` 改用 `path.resolve(__dirname, ...)`，任意目录构建产物一致（此前从 `packages/web` 构建会丢失全部工具类）
+- **fix(web)** — 消除双份 React：`packages/web` 现在自带完整前端工具链（react / react-router-dom / vitest / testing-library / jsdom / typescript），`vitest.config.ts` 的 `react` 别名改指本包 `node_modules`。此前别名指向仓库根，一旦从干净依赖树跑测试就会 `Invalid hook call`（本地因旧缓存侥幸通过，CI 必挂）
+- **fix(ci)** — `npm run build:server` 需要 `@types/js-yaml`，`e2e-test` job 补上 `npm ci --prefix packages/server`
 - **build** — 根 `npm run build` 新增 `build:web`；`npm run typecheck` 同时检查 `packages/web`
 - **test** — 根 `npm test` / `test:coverage` 串联三套套件（根 76 + server 325 + web 54 = 455）
 - **ci** — `e2e-test` job 自 2026-05-17 起 12/12 失败（`baseURL :3000` 配 `webServer` 跑 vite `:5173`）：现统一为根目录单一 Playwright harness（拉起 server 并服务已构建 UI），`packages/web` 脚本转发到同一配置；`unit-test` job 补上 typecheck（含 web）、lint、全量测试与质量门禁

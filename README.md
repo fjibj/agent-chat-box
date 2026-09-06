@@ -109,7 +109,7 @@ IDSD 在两个地方留有试点：`idsd-pilot/gap19/`（首次尝试，修复 G
 | Daemon | Node.js + WebSocket |
 | 前端 | React 19 + Vite 6 + Tailwind CSS 3.4 |
 | 类型 | TypeScript strict |
-| 包管理 | npm（monorepo；`packages/web` 与 `packages/server` 各自带 lockfile，尚未切 npm workspaces） |
+| 包管理 | npm（monorepo；`packages/web` 与 `packages/server` 各自带 lockfile 与完整工具链，尚未切 npm workspaces） |
 | 测试 | Vitest（455 用例：根 76 + server 325 + web 54） + Playwright E2E |
 
 ## 快速开始
@@ -134,7 +134,7 @@ FEDERATION_TEAM_ID=team-b \
 npm run dev:server
 ```
 
-> 全新克隆后补一句（web/server 的依赖不在根 lockfile 里）：
+> 全新克隆后补一句（两个包自带工具链：react / vitest / testing-library / js-yaml 类型都在各自 node_modules 里）：
 > `npm ci --prefix packages/web && npm ci --prefix packages/server`
 
 ## 构建与校验
