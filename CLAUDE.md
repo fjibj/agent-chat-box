@@ -291,23 +291,27 @@ Agent 状态：`sleeping` → `awake` → `running` → `sleeping`（或 `offlin
 - **代码风格**: ESLint + Prettier，`npm run lint` / `npm run format`
 - **注释语言**: 英文（保持代码库统一）
 - **提交规范**: Conventional Commits（`feat:` / `fix:` / `docs:` / `chore:` / `test:`）
-- **测试**: Vitest（`npm test`），server/web 测试分别进入对应目录运行，`npm run quality:gates` 跑质量门禁
-- **CI**: `.github/workflows/test.yml`
+- **测试**: Vitest（`npm test` = 根 76 + server 325 + web 54 = 455 用例，一次跑完），`npm run quality:gates` 跑质量门禁
+- **E2E**: 单一 harness 在根目录（`npm run test:e2e`）；先 `npm run build:web`，harness 会拉起 server(:3000) 并服务已构建 UI；联邦用例需 `FEDERATION_E2E=1` + 手动 Hub(:3001)/Runner(:3002)
+- **CI**: `.github/workflows/test.yml`（`unit-test` + `e2e-test` 两个 job，均需绿）
 
 ### 常用命令
 
 ```bash
-npm install                   # 安装所有依赖
+npm install                   # 安装根目录依赖
+npm ci --prefix packages/web  # web 自带 lockfile（tailwind / react-router-dom / vite）
+npm ci --prefix packages/server  # server 自带 lockfile（js-yaml 等）
 npm run dev:server            # 启动服务器（tsx watch 热重载）
 npm run dev:web               # 启动 Web UI（Vite dev server）
-npm run build                 # 构建 shared + server + daemon
-npm test                      # 跑根目录 Vitest 测试
-cd packages/server && ../../node_modules/.bin/vitest run  # 跑 server 测试
-cd packages/web && ../../node_modules/.bin/vitest run     # 跑 web 测试
+npm run build                 # 构建 shared + server + daemon + web（web 含 tsc）
+npm run build:web             # 只构建 Web UI（E2E 前置条件）
+npm test                      # 根 + server + web 全部 Vitest 用例
+npm run test:coverage         # 同上，带覆盖率报告
+npm run test:e2e              # Playwright E2E（根目录单一 harness）
 npm run quality:gates         # 跑 BMAD/TEA 质量门禁
-pnpm typecheck                # tsc --noEmit 全量类型检查
-pnpm lint                     # ESLint
-pnpm format                   # Prettier 写回
+npm run typecheck             # tsc --noEmit：packages/*/src + packages/web
+npm run lint                  # ESLint（0 errors 门禁）
+npm run format                # Prettier 写回
 ```
 
 ### Daemon 启动

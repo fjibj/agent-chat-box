@@ -967,7 +967,7 @@ sqlite3 data/agent-chat-box.sqlite \
 | ----- | --------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------ | ---- | ------------------------------------------------------------------ |
 | M8-13 | 跨团队批准后远程 Agent 唤醒                                     | Hub 调用 `wakeFederationAgent` 发送 `federation.agent.wake` 给 Runner                                                          | [x]  | Runner 日志显示 "Wake agent ... for task ..."                      |
 | M8-14 | `POST /api/federation/claim` 真实实现                           | 更新 `federation_task_index.status='claimed'`，返回 `{success:true, authorization_request_id, status:"pending_authorization"}` | [x]  | curl 验证                                                          |
-| M8-15 | ⚠️ **剩余 TODO：** `handleClaim` WebSocket 路由仍只 console.log | 检查 `hub.ts:271-274` 注释 "TODO: Route claim to source team server (STORY-F012)"                                              | [❌] | 代码审查确认 TODO 仍存在；不影响 REST `/api/federation/claim` 路径 |
+| M8-15 | ✅ **已关闭（GAP-12a）**：`handleClaim` WS 路由已实现           | `hub.ts` 抽取 `processFederationClaim`，路由 claim 到源团队并回 `federation.task.claim.result`；`runner.ts` 处理回执 | [x]  | 代码审查 + `hub.test.ts` / `federation-integration.test.ts` 覆盖；原 TODO 注释已删除 |
 
 ---
 
@@ -1038,10 +1038,10 @@ sqlite3 data/agent-chat-box.sqlite \
 | M5 Authorizations 闸门 | 34      | 34      | 0       | 0       |                            |
 | M6 信誉分              | 10      | 10      | 0       | 0       | M6-03/M6-04 已修复         |
 | M7 Review 工作流       | 8       | 8       | 0       | 0       |                            |
-| M8 联邦网关 UI 联动    | 15      | 14      | 1       | 0       | M8-15 WS claim TODO 仍存在 |
+| M8 联邦网关 UI 联动    | 15      | 15      | 0       | 0       | M8-15 已由 GAP-12a 关闭      |
 | M9 Tasks 页面交互      | 18      | 18      | 0       | 0       |                            |
 | M10 跨团队聊天         | 5       | 5       | 0       | 0       | GAP-19 已修复              |
-| **总计**               | **206** | **187** | **1**   | **0**   | GAP-19 修复后失败项降为 1  |
+| **总计**               | **206** | **188** | **0**   | **0**   | GAP-19 与 M8-15 均已关闭    |
 
 ---
 
@@ -1099,11 +1099,12 @@ sqlite3 data/agent-chat-box.sqlite \
 
 ### 补充说明
 
-- **执行结果**：附录 A~M 共 206 个验证项已全部执行；通过 IDSD 试验修复 GAP-19 后，当前 **187 项通过 ✅、1 项失败 ❌、0 项跳过 ⏭️**。
+- **执行结果**：附录 A~M 共 206 个验证项已全部执行；通过 IDSD 试验修复 GAP-19、并确认 M8-15（WS claim）已由 GAP-12a 落地后，当前 **188 项通过 ✅、0 项失败 ❌、0 项跳过 ⏭️**。
 - **已关闭缺口（8 个）**：GAP-14 / GAP-15 / GAP-16 / GAP-06a / GAP-08 / GAP-12a / GAP-13 / **GAP-19**。
 - **剩余开放缺口（0 个）**：所有已识别 UI 缺口均已关闭。
-- **建议决策**：推荐 **GO** — 14 个 v0.2.0 follow-up GAP、7 个后续补丁 GAP 与 GAP-19 已全部关闭；仅剩 M8-15 的 WS claim TODO 为已知非阻塞技术债。
-- **自动化测试**：根 76 + server 245 + web 45 = 366 用例全部通过；typecheck 通过；lint 0 errors（54 warnings，均为既有）。
+- **建议决策**：推荐 **GO** — 14 个 v0.2.0 follow-up GAP、7 个后续补丁 GAP、GAP-19 与 M8-15 已全部关闭；无已知阻塞项。
+- **自动化测试**（2026-09-06 复核）：根 76 + server 325 + web 54 = **455 用例全部通过**；`npm run typecheck`（含 `packages/web`）通过；`npm run build`（含 web 生产构建）通过；lint 0 errors（54 warnings，均为既有）；`npm run quality:gates` 通过。
+- **E2E**：`npm run test:e2e`（根目录单一 harness，拉起 server 并服务已构建 UI）8 通过 / 5 跳过；跳过的 5 项为联邦用例，需手动启动 Hub(:3001) 与 Runner(:3002)，用 `FEDERATION_E2E=1` 显式开启。
 - **回归测试建议**：
   - GAP-19 已修复，建议回归 Groups 创建流程与 Chat 页面成员列表。
   - GAP-14 已落地，建议回归 Authorizations 页面实时出现/消失、Groups 页面成员实时更新、TaskBoard 实时状态流转。
@@ -1127,4 +1128,6 @@ sqlite3 data/agent-chat-box.sqlite \
 | 2026-07-04 | M10 跨团队聊天                  | 4 项通过（MemberList/@mention/消息发送/名称解析）；1 项失败 M10-01（设计缺口：无自动群聊频道）                    | ✅/❌ |
 | 2026-07-04 | 后续补丁：关闭 7 个开放缺口     | GAP-14/15/16/06a/08/12a/13 已实现并补测试；typecheck/tests/lint/quality:gates 通过；docs 更新                 | ✅    |
 | 2026-07-05 | IDSD 试验：修复 GAP-19          | 使用 IDSD Planned-Build 完成自动群聊频道创建；server 245 / web 45 用例通过；Holdout 8 场景 100% 通过            | ✅    |
+| 2026-08-03~05 | 域层（IDSD 5 切片）         | 域注册 / 能力发现 / 域级信誉隔离 / 域协作与评分 / `DomainsPage`；schema v10→v12；holdout 40/40 自动 + 26 项人工验收      | ✅    |
+| 2026-09-06 | 工程链路修复与记录归位       | 修 `packages/web` 生产构建（`vite-env.d.ts` + 测试夹具类型）与 tailwind content 路径；`typecheck`/`build` 覆盖 web；E2E 合并为根目录单一 harness（groups.spec 修正严格定位，联邦用例改为 `FEDERATION_E2E=1` 开启）；CI 跑全部 455 用例 + web 构建；M8-15 标记为已关闭 | ✅    |
 |            | ...                             |                                                                                                                   |       |

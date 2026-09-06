@@ -1,5 +1,29 @@
 # Changelog
 
+## [Unreleased]
+
+### 新增：域层（Domain）— 用 IDSD 方法于 2026-08-02 ~ 08-05 交付
+
+- **域注册** — `POST/GET/DELETE /api/domains`、`/invite`、`/join`、`/:id/leave`；owner 群禁止退出、邀请码上限与失效校验
+- **能力声明与发现** — `domain-capabilities.ts` 4 端点：声明 / 列表 / `discover`（`required ⊆ declared` 子集匹配，按信誉排序）/ 信誉查询
+- **域协作** — `domain-collab.ts` 3 端点：发起协作任务自动路由到能力匹配的群、列表、请求方评分（复用群层 review 事件语义，零新规则）
+- **域级信誉隔离** — `reputation_records.domain_id`（NULL = 群层事件计入所有域；非 NULL = 域协作事件只计入该域）；连续 5 次 rejected 触发 flagged，approve 打断连击
+- **边界清理** — 解散域 / 退出域 / 删群级联清理 `domain_tasks` 与 `domain_members`
+- **数据层** — schema v10（domains / domain_members）→ v11（domain_tasks）→ v12（信誉域标记）
+- **Web UI** — 新增 `DomainsPage`（群选择器、域列表/创建/加入、域详情、能力声明、发现、协作与评分、信誉看板、错误横幅）+ 导航与路由
+- **方法论** — 5 个切片均为“构建代理看不到 holdout 场景 + 考官独立判分”；holdout 40/40 自动 + 26 项人工验收；过程中由 holdout 拓出一处真实缺陷（信誉不跨域隔离）。详见 `idsd-pilot/domain/IDSD域层实战总结.md`
+
+### 修复：工程链路与质量门禁（2026-09-06）
+
+- **fix(web)** — 补 `packages/web/src/vite-env.d.ts`（`vite/client` 类型，修 `import.meta.env` 报错）；`TaskCardProps` 导出供测试引用；`TaskDetailModal.test.tsx` 夹具补 `parentTaskId` 类型。之因长期未发现：根 `tsconfig.json` 排除了 `packages/web/src`
+- **fix(web)** — `tailwind.config.cjs` 的 `content` 改用 `path.resolve(__dirname, ...)`，任意目录构建产物一致（此前从 `packages/web` 构建会丢失全部工具类）
+- **build** — 根 `npm run build` 新增 `build:web`；`npm run typecheck` 同时检查 `packages/web`
+- **test** — 根 `npm test` / `test:coverage` 串联三套套件（根 76 + server 325 + web 54 = 455）
+- **ci** — `e2e-test` job 自 2026-05-17 起 12/12 失败（`baseURL :3000` 配 `webServer` 跑 vite `:5173`）：现统一为根目录单一 Playwright harness（拉起 server 并服务已构建 UI），`packages/web` 脚本转发到同一配置；`unit-test` job 补上 typecheck（含 web）、lint、全量测试与质量门禁
+- **test(e2e)** — `e2e/groups.spec.ts` 修正严格定位冲突（此前三重定义失效导致该 spec 从未真正跑过）；联邦用例改为 `FEDERATION_E2E=1` 显式开启（需手动 Hub:3001 / Runner:3002）
+- **chore** — `e2e/.auth/`（登录态）与 `packages/web/.env.development` 移出跟踪，新增 `packages/web/.env.example`
+- **docs** — README 补全分层（Team/Group/Domain/World）与 BMAD+TEA vs IDSD 研发流程说明；`manual-verification.md` 将 M8-15 标记为已关闭（GAP-12a 已落地）、测试计数归正 455
+
 ## [0.2.0] - 2026-05-16
 
 ### 群级扩展 (Group Expansion)

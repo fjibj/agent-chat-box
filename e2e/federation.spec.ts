@@ -2,6 +2,13 @@ import { test, expect } from '@playwright/test';
 
 // E2E Federation Gateway Tests
 // Covers: Runner registration → task publish → poll → claim → wake → complete
+//
+// These need two extra server instances (Hub on :3001, Runner on :3002) started out of
+// band — see docs/federation-e2e-manual-test-guide.md. Opt in with FEDERATION_E2E=1.
+test.skip(
+  !process.env.FEDERATION_E2E,
+  'Federation E2E requires a manual Hub (:3001) and Runner (:3002); set FEDERATION_E2E=1',
+);
 
 const HUB_PORT = 3001;
 const RUNNER_PORT = 3002;

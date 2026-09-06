@@ -13,7 +13,10 @@ coverage/
 data/
 *.log
 .playwright-mcp/
+e2e/.auth/
+packages/web/.env.development
 docs/api-keys.md
 test-results/
+playwright-report/
 *.bak
 *.png

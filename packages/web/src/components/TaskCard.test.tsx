@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { render, screen } from '@testing-library/react';
-import { TaskCard } from './TaskCard';
+import { TaskCard, type TaskCardProps } from './TaskCard';
 
 describe('TaskCard', () => {
   const baseProps = {

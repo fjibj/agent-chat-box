@@ -30,18 +30,54 @@
 - **跨团队唤醒** — 远程 Agent 唤醒执行联邦任务
 - **出入群广播** — member.joined / member.left 联邦消息广播
 
+### v0.2.0-idsd 域系统（Domain）
+
+域是**多个群组成的联盟层**：让能力与信誉在群之间可发现、可流转，规则只复用不新增。
+
+- **域注册** — 群作为成员加入域：创建 / 详情 / 我的域列表、邀请码入群、退域、owner 禁止退出、解散域
+- **能力声明** — 成员群在域内声明共享能力，语义与群层 `shared_capabilities` 一致
+- **能力发现** — `required ⊆ declared` 子集匹配，结果按域内信誉排序并带异常标记（flagged）
+- **域级信誉** — 与群层同构但**按域隔离**（`reputation_records.domain_id`：NULL = 群层事件计入所有域，非 NULL = 域协作事件只计入该域），聚合为均值单一函数
+- **域协作** — 发起协作任务自动路由到能力匹配的群；完成/失败回流信誉，请求方评分（复用群层 review 事件语义，零新规则）
+- **异常检测** — 同域内连续 5 次 rejected 触发 flagged，一次 approve 即打断连击
+- **边界清理** — 解散域 / 退出域 / 删群级联清理 `domain_tasks` 与 `domain_members`
+- **数据层** — schema v10（domains / domain_members）→ v11（domain_tasks）→ v12（信誉域标记）
+- **Web UI** — 新增 `DomainsPage`：群选择器、域列表/创建/加入、域详情（成员/邀请/退域/解散）、能力声明、发现、协作与评分、信誉看板、错误横幅
+- **API** — 14 个端点，前缀 `/api/domains`（域注册 7 + 能力/发现/信誉 4 + 协作 3）
+
+### 分层与研发流程
+
+系统按四层递进开发，各层采用的研发方法并不相同：
+
+```
+World    世界 — 未开始
+  └── Domain  域   — 已完成（2026-08）   ← IDSD（Intent + Expectations + Holdout Set）
+        └── Group   群   — 已完成（2026-05~07） ← BMAD + TEA（规格 + 故事 + 质量门禁）
+              └── Team    团队 — 已完成（2026-05）  ← BMAD + TEA
+```
+
+| 层 | 方法 | 过程产物 | 完成判定 |
+|---|---|---|---|
+| 团队 / 群 | BMAD + TEA | `docs/` — PRD、架构、Sprint、71 个用户故事、TEA/故事质量门禁；`docs/manual-verification.md` 为含 UI 的手工验证记录（206 项） | 故事验收标准 + 人工审查 + Go/No-Go 决策 |
+| 域 | IDSD | `idsd-pilot/domain/` — 总体 Intent（9 约束 / 8 失败条件）、5 个切片的 Intent+Expectations、40 个 holdout 场景、逐切片 checkpoint | 构建代理看不到 holdout 场景，考官独立判分：40/40 自动 + 26 项人工验收 |
+| 世界 | 待定 | — | — |
+
+IDSD 在两个地方留有试点：`idsd-pilot/gap19/`（首次尝试，修复 GAP-19）与 `idsd-pilot/domain/`（整层交付）。域层评估中由 holdout 抓出一处真实缺陷（信誉不跨域隔离），修复后 38/39 → 39/39 —— 详见 [IDSD 域层实战总结](idsd-pilot/domain/IDSD域层实战总结.md)。
+
 ## 架构
 
 ```
 ┌─────────────────────────────────────────────────────┐
 │                   Web UI (React)                    │
-│ Chat | Tasks | Group Tasks | Groups | Authorizations | Agents | Settings │
+│ Chat | Tasks | Group Tasks | Groups | Domains |     │
+│    Authorizations | Agents | Settings               │
 └────────────────────────┬────────────────────────────┘
                          │ WebSocket + REST API
 ┌────────────────────────┴────────────────────────────┐
 │                Central Server (Fastify)             │
 │  TaskQueue | AgentReg | MsgRouter | GroupManager    │
 │  Federation Hub | Reputation | AuthorizationGate    │
+│  DomainReg | DomainDiscover | DomainCollab          │
 └──────┬──────────────┬──────────────┬────────────────┘
        │              │              │
 ┌──────┴──────┐ ┌─────┴──────┐  ┌────┴───────┐
@@ -71,10 +107,10 @@
 | 服务器 | Fastify + ws + SQLite (sql.js) |
 | 联邦网关 | WebSocket + 自定义协议 (slock envelope) |
 | Daemon | Node.js + WebSocket |
-| 前端 | React 19 + Vite 6 + Tailwind CSS 4 |
+| 前端 | React 19 + Vite 6 + Tailwind CSS 3.4 |
 | 类型 | TypeScript strict |
-| 包管理 | npm（monorepo，根目录管理依赖） |
-| 测试 | Vitest（362+ 用例） + Playwright E2E |
+| 包管理 | npm（monorepo；`packages/web` 与 `packages/server` 各自带 lockfile，尚未切 npm workspaces） |
+| 测试 | Vitest（455 用例：根 76 + server 325 + web 54） + Playwright E2E |
 
 ## 快速开始
 
@@ -98,6 +134,26 @@ FEDERATION_TEAM_ID=team-b \
 npm run dev:server
 ```
 
+> 全新克隆后补一句（web/server 的依赖不在根 lockfile 里）：
+> `npm ci --prefix packages/web && npm ci --prefix packages/server`
+
+## 构建与校验
+
+```bash
+npm run typecheck      # packages/*/src + packages/web（strict）
+npm run lint           # 0 errors 门禁
+npm test               # 根 76 + server 325 + web 54 = 455 用例
+npm run quality:gates  # TODO 基线 / 孤儿组件 / 硬编码版本
+npm run build          # shared + server + daemon + web（web = tsc + vite build）
+
+# E2E：harness 自己拉起 server(:3000) 并服务已构建的 Web UI
+npm run build:web
+npm run test:e2e
+FEDERATION_E2E=1 npm run test:e2e   # 追加联邦用例（需手动起 Hub:3001 / Runner:3002）
+```
+
+CI（`.github/workflows/test.yml`）跑的就是上面这几条；`unit-test` 与 `e2e-test` 两个 job 都应绿。
+
 ## 项目结构
 
 ```
@@ -106,22 +162,24 @@ agent-chat-box/
 │   ├── shared/     # 共享类型和常量
 │   ├── server/     # 中央服务器 (Fastify + WebSocket + SQLite)
 │   │   ├── src/
-│   │   │   ├── api/         # REST API (groups, tasks, agents, ...)
+│   │   │   ├── api/         # REST API (groups, domains, tasks, agents, ...)
 │   │   │   ├── federation/  # 联邦网关 (hub, runner, protocol)
 │   │   │   ├── modules/     # 核心模块 (task-queue, reputation, wake-engine)
 │   │   │   ├── ws/          # WebSocket 处理
-│   │   │   └── db/          # 数据库 (schema v9)
+│   │   │   └── db/          # 数据库 (schema v12，含 v10~v12 域层迁移)
 │   ├── daemon/     # Agent Daemon (机器端守护进程)
 │   └── web/        # Web UI (React + Vite + Tailwind)
 │       └── src/pages/
 │           ├── GroupsPage.tsx         # 群管理
+│           ├── DomainsPage.tsx        # 域（多群联盟）管理
 │           ├── GroupTasksPage.tsx     # 群任务专属页面
 │           ├── AuthorizationsPage.tsx # 授权审批
 │           ├── AgentsPage.tsx         # Agent 管理
 │           └── SettingsPage.tsx       # 设置与联邦状态
 ├── tests/          # 测试 (API 集成 + 单元测试 + E2E)
 ├── e2e/            # Playwright E2E 测试
-├── docs/           # 设计文档、用户故事、测试报告
+├── docs/           # 设计文档、用户故事、测试报告（团队/群两层，BMAD + TEA）
+├── idsd-pilot/     # IDSD 试点产物（gap19 单点修复、domain 整层交付）
 └── .github/
     └── workflows/
         └── test.yml  # CI 测试流水线
@@ -129,6 +187,7 @@ agent-chat-box/
 
 ## 版本历史
 
+- **域层（Domain）** — 多群联盟层：域注册、能力发现、域级信誉隔离、域协作与评分、`DomainsPage`；整层由 IDSD 方法交付，holdout 40/40 自动场景 + 26 项人工验收（2026-08-02 ~ 08-05，尚未单独打版本标签，过程记录见 `idsd-pilot/domain/`）
 - **[v0.2.0-idsd-gap19](CHANGELOG.md)** — 使用 IDSD 方法修复 GAP-19：创建群时自动创建群聊频道；Holdout Set 8 场景 100% 通过（2026-07-05）
 - **[v0.2.0-followup-patch](CHANGELOG.md)** — 关闭人工验证 7 个开放缺口（GAP-14/15/16/06a/08/12a/13），后续通过 IDSD 试点修复 GAP-19（2026-07-05）
 - **[v0.2.0-followup](CHANGELOG.md)** — UI 补齐 + 联邦完整链路 + 质量门禁（2026-07-03）
@@ -152,6 +211,11 @@ agent-chat-box/
 - [联邦网络拓扑分析](docs/federation-network-topology-analysis.md)
 - [联邦 E2E 测试指南](docs/federation-e2e-manual-test-guide.md)
 - [IDSD 实践案例：GAP-19](docs/idsd-gap19-case-study.md) — 第一次使用 IDSD Planned-Build 方法修复缺口的完整记录
+- [IDSD 域层实战总结](idsd-pilot/domain/IDSD域层实战总结.md) — 用 IDSD 交付整层的完整流水线、教训与缺陷统计
+- [IDSD 域层逐切片战报](idsd-pilot/domain/checkpoint.md) — 5 个切片的构建与评估记录
+- [IDSD 域层 Holdout Set](idsd-pilot/domain/holdout/scenarios/) — 40 个自动场景 + 1 个人工验收场景（构建时对代理不可见）
+- [用 IDSD 开发「域」层的实操指南](用IDSD开发_域_层的实操指南.md) — 方法论：Context → Intent → Expectations → 速度管道 → Harness
+- [IDSD 工具链方案](IDSD工具链方案.md) — 三层速度管道与「考/生分离」机制
 
 ## License
 

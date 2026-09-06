@@ -25,11 +25,13 @@ const baseTask = {
   completedAt: 3000,
 };
 
+type FixtureTask = typeof baseTask & { parentTaskId?: string };
+
 function mockFetchWith(data: {
-  task?: typeof baseTask;
+  task?: FixtureTask;
   timeline?: Array<{ type: string; timestamp: number; data: Record<string, unknown> }>;
   agents?: Array<{ id: string; name: string; status: string }>;
-  tree?: { task: typeof baseTask; children: (typeof baseTask)[] } | null;
+  tree?: { task: FixtureTask; children: FixtureTask[] } | null;
   names?: Record<string, string>;
 }) {
   (global.fetch as ReturnType<typeof vi.fn>).mockImplementation((input: RequestInfo | URL) => {
