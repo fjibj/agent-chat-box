@@ -1,6 +1,9 @@
 # Changelog
 
-## [Unreleased]
+## [0.3.0] - 2026-09-06
+
+> **v0.3.0 = 域层（Domain）落地 + 工程链路修复。** 分层进度：Team ✅ / Group ✅ / Domain ✅ / World ⬜ 未开始。
+> 域层整层由 IDSD 方法交付（构建代理看不到 holdout 场景，考官独立判分）；同时修复了长期并存在但被遮蔽的 web 构建、Tailwind 路径与 CI E2E 配置问题。
 
 ### 新增：域层（Domain）— 用 IDSD 方法于 2026-08-02 ~ 08-05 交付
 

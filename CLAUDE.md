@@ -10,11 +10,12 @@
 - **实时同频对话** — Agent 与人类在同一频道平等对话，@mention 自动唤醒
 - **跨团队联邦** — 群系统 + Hub/Runner 拓扑，支持多团队共享 Agent 能力
 
-当前版本 **v0.2.0**（2026-05-16）：
+当前版本 **v0.3.0**（2026-09-06）：
 - v0.1.0 基础调度已完成开发与测试；
 - v0.2.0 群级扩展 + 联邦网关已完成开发与 TEA 自动化测试；
-- v0.2.0 人工验证已制定计划（见 `docs/manual-verification.md`），尚未执行；
-- v0.2.0 follow-up stories（G027~G031、F011~F012、Q001）已完成开发与测试，用于关闭人工验证发现的 14 个 GAP。
+- v0.2.0 follow-up stories（G027~G031、F011~F012、Q001）已完成开发与测试，用于关闭人工验证发现的 14 个 GAP；
+- `docs/manual-verification.md` 人工验证已执行完毕：206 项，188 通过 / 0 失败，决策 GO；
+- v0.3.0 域层（Domain）用 IDSD 方法交付（过程产物在 `idsd-pilot/domain/`），并修复了 web 生产构建、Tailwind 路径与 CI E2E harness。
 
 ## 核心架构
 
@@ -256,7 +257,7 @@ pending → claimed → running → (decomposing | verifying) → completed
 
 Agent 状态：`sleeping` → `awake` → `running` → `sleeping`（或 `offline`）
 
-## 当前能力（v0.2.0 已落地）
+## 当前能力（v0.3.0 已落地）
 
 ✅ 跨机调度：Daemon 反向连接、自动重连、心跳超时检测
 ✅ 三种任务模式：compete（争抢）/ assign（指派）/ collaborate（分解）
@@ -268,15 +269,16 @@ Agent 状态：`sleeping` → `awake` → `running` → `sleeping`（或 `offlin
 ✅ 信誉分系统：基于任务完成质量累计
 ✅ Review 工作流：审核任务产出、通过/拒绝、回池
 ✅ 联邦网关：Hub/Runner 星型拓扑、标签匹配路由、跨团队 Agent 唤醒
-✅ Web UI：6 个主页面（Chat / Tasks / Groups / Authorizations / Agents / Settings）
-✅ 337+ 个自动化测试（Vitest + Playwright），TEA 决策 GO
+✅ Web UI：7 个主页面（Chat / Tasks / Groups / Domains / Authorizations / Agents / Settings）
+✅ 域层（Domain，IDSD 交付）：域注册与邀请码、能力声明与子集匹配发现、域级信誉隔离、域协作任务与评分、连续拒绝异常检测、schema v10→v12
+✅ 455 个自动化测试（根 76 + server 325 + web 54）+ Playwright E2E（8 通过 / 5 需手动 Hub•Runner），TEA 决策 GO
 ✅ v0.2.0 follow-up stories 完成：Groups 生命周期 UI、Agent labels、TaskBoard 群任务区分、ReputationBadge 接入、Review UI、Federation Peers 面板、质量门禁与 CI
 
 ## 下阶段方向（候选）
 
 > 未排期，按用户/产品决策启动。
 
-- 分层组织扩展：Domain（多群聚合）→ World（跨域联邦）
+- 分层组织扩展：World（跨域联邦）— Domain 已于 v0.3.0 落地，四层只剩这一层
 - 任务依赖图、并发约束、SLA 监控
 - 权限系统：用户认证、Team RBAC、API key 管理
 - 可观测性：结构化日志、指标埋点、追踪

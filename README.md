@@ -30,7 +30,7 @@
 - **跨团队唤醒** — 远程 Agent 唤醒执行联邦任务
 - **出入群广播** — member.joined / member.left 联邦消息广播
 
-### v0.2.0-idsd 域系统（Domain）
+### v0.3.0 域系统（Domain）
 
 域是**多个群组成的联盟层**：让能力与信誉在群之间可发现、可流转，规则只复用不新增。
 
@@ -50,10 +50,10 @@
 系统按四层递进开发，各层采用的研发方法并不相同：
 
 ```
-World    世界 — 未开始
-  └── Domain  域   — 已完成（2026-08）   ← IDSD（Intent + Expectations + Holdout Set）
-        └── Group   群   — 已完成（2026-05~07） ← BMAD + TEA（规格 + 故事 + 质量门禁）
-              └── Team    团队 — 已完成（2026-05）  ← BMAD + TEA
+World    世界 — 未开始（v0.4+ 候选）
+  └── Domain  域   — v0.3.0（2026-08~09）   ← IDSD（Intent + Expectations + Holdout Set）
+        └── Group   群   — v0.2.0（2026-05~07） ← BMAD + TEA（规格 + 故事 + 质量门禁）
+              └── Team    团队 — v0.1.0（2026-05）  ← BMAD + TEA
 ```
 
 | 层 | 方法 | 过程产物 | 完成判定 |
@@ -187,7 +187,7 @@ agent-chat-box/
 
 ## 版本历史
 
-- **域层（Domain）** — 多群联盟层：域注册、能力发现、域级信誉隔离、域协作与评分、`DomainsPage`；整层由 IDSD 方法交付，holdout 40/40 自动场景 + 26 项人工验收（2026-08-02 ~ 08-05，尚未单独打版本标签，过程记录见 `idsd-pilot/domain/`）
+- **[v0.3.0](CHANGELOG.md)** — 域层（Domain）+ 工程链路修复：域注册 / 能力发现 / 域级信誉隔离 / 域协作与评分 / `DomainsPage`；IDSD 5 切片，holdout 40/40 自动 + 26 项人工验收；schema v10→v12；修 `packages/web` 构建与 CI E2E harness（2026-09-06）
 - **[v0.2.0-idsd-gap19](CHANGELOG.md)** — 使用 IDSD 方法修复 GAP-19：创建群时自动创建群聊频道；Holdout Set 8 场景 100% 通过（2026-07-05）
 - **[v0.2.0-followup-patch](CHANGELOG.md)** — 关闭人工验证 7 个开放缺口（GAP-14/15/16/06a/08/12a/13），后续通过 IDSD 试点修复 GAP-19（2026-07-05）
 - **[v0.2.0-followup](CHANGELOG.md)** — UI 补齐 + 联邦完整链路 + 质量门禁（2026-07-03）
